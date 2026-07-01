@@ -1,0 +1,159 @@
+# sources.yaml — corpus for the LLM Wiki observability POC
+#
+# Theme: "Traditional/APM observability vs. LLM/agent observability — what transfers, what's new."
+# Chosen so sources OVERLAP and CONTRADICT each other — that gives the ingest pipeline's
+# Evaluate + Repair stages real work (reconciling claims, flagging contradictions), which is
+# what makes the traces deep instead of shallow.
+#
+# Fields per source:
+#   url       : where to fetch
+#   topic     : traditional | otel | llm | contrarian   (drives raw/ subfolder + page tagging)
+#   stance    : short note on the position it takes (helps the writer/judge detect contradictions)
+#   pair      : optional id linking deliberately contradictory sources (e.g. pillars_debate)
+#
+# NOTE TO BUILDER: verify each URL is still live at ingest time (re-fetch; the web moves).
+# Licensing: these are public vendor docs / engineering blogs, fine for an internal demo.
+# Do not redistribute the compiled wiki/ externally without re-checking source licenses.
+# Prefer ingesting the main article body only (the pipeline's extract stage strips nav/ads).
+
+sources:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # GROUP A — Traditional / "three pillars" canon (the orthodoxy)
+  # These broadly agree, which is the point: the writer should MERGE them into
+  # one strong "three pillars" concept page rather than three near-duplicate pages.
+  # ─────────────────────────────────────────────────────────────────────────
+  - url: https://www.ibm.com/think/insights/observability-pillars
+    topic: traditional
+    stance: "Canonical three pillars (metrics/logs/traces); also floats context/correlation/alerting as further pillars."
+    pair: pillars_debate
+
+  - url: https://www.techtarget.com/searchitoperations/tip/The-3-pillars-of-observability-Logs-metrics-and-traces
+    topic: traditional
+    stance: "Mainstream three-pillars overview; pillars as the most important telemetry sources."
+    pair: pillars_debate
+
+  - url: https://sematext.com/glossary/three-pillars-of-observability/
+    topic: traditional
+    stance: "Three pillars + explicit list of their gaps/limits (alert noise, microservice drill-down)."
+    pair: pillars_debate
+
+  - url: https://www.elastic.co/blog/3-pillars-of-observability
+    topic: traditional
+    stance: "Proposes a FOURTH pillar: profiling. Internal contradiction with the strict three-pillar view."
+    pair: pillars_count   # contradicts the 'exactly three' framing
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # GROUP B — Contrarian / "pillars are bullshit" + wide events (the heresy)
+  # Direct counterweight to Group A. The judge/repair stages should surface the
+  # contradiction and the wiki should end up with a balanced "pillars debate" page.
+  # ─────────────────────────────────────────────────────────────────────────
+  - url: https://www.honeycomb.io/blog/so-you-want-to-build-an-observability-tool
+    topic: contrarian
+    stance: "Charity Majors: 'there are no three pillars.' Lists capabilities a real obs tool MUST have. Doubles as an adequacy rubric."
+    pair: pillars_debate
+
+  - url: https://www.honeycomb.io/blog/one-key-difference-observability1dot0-2dot0
+    topic: contrarian
+    stance: "Observability 1.0 (many pillars, many sources of truth) vs 2.0 (one wide structured event). Single-source-of-truth thesis."
+    pair: pillars_debate
+
+  - url: https://isburmistrov.substack.com/p/all-you-need-is-wide-events-not-metrics
+    topic: contrarian
+    stance: "'All you need is wide events, not metrics/logs/traces.' Blames OTel framing for confusion. Strong anti-pillars stance."
+    pair: pillars_debate
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # GROUP C — OpenTelemetry core (the shared substrate both sides build on)
+  # Concepts: spans/traces, context propagation, sampling. Includes the
+  # head-vs-tail sampling debate (another genuine, judge-able disagreement).
+  # ─────────────────────────────────────────────────────────────────────────
+  - url: https://opentelemetry.io/docs/languages/dotnet/traces/tail-based-sampling/
+    topic: otel
+    stance: "Official OTel: tail-based sampling decides AFTER trace completes (vs head-based at start)."
+    pair: sampling_debate
+
+  - url: https://betterstack.com/community/guides/observability/opentelemetry-sampling/
+    topic: otel
+    stance: "Beginner's guide to head vs tail sampling; tradeoffs and propagation via W3C trace context."
+    pair: sampling_debate
+
+  - url: https://uptrace.dev/opentelemetry/sampling
+    topic: otel
+    stance: "Argues head-based sampling should be PREFERRED as default (simplest/most reliable); tail only to catch errors."
+    pair: sampling_debate   # contradicts 'tail is necessary for maturity' takes
+
+  - url: https://oneuptime.com/blog/post/2026-02-06-head-based-vs-tail-based-sampling-opentelemetry/view
+    topic: otel
+    stance: "Practical head-vs-tail decision guide; tail needs load-balancing-by-trace-ID infra. Nuanced middle position."
+    pair: sampling_debate
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # GROUP D — LLM / agent observability (the 'what's new' core of the demo)
+  # These define the contrast your lead cares about. Note: several REUSE the
+  # 'three pillars' label for LLM obs (Comet) — a productive contradiction with
+  # Group A's traditional usage that the writer must reconcile.
+  # ─────────────────────────────────────────────────────────────────────────
+  - url: https://www.vellum.ai/blog/a-guide-to-llm-observability
+    topic: llm
+    stance: "Why APM falls short for LLMs: non-determinism, 'correctness' is hard, multi-step chains. Observability vs evaluation distinction."
+    pair: trad_vs_llm
+
+  - url: https://www.splunk.com/en_us/blog/learn/llm-observability.html
+    topic: llm
+    stance: "LLM obs vs traditional monitoring; inputs/outputs/model/app-level signals; prevent hallucination & drift."
+    pair: trad_vs_llm
+
+  - url: https://www.comet.com/site/blog/llm-observability/
+    topic: llm
+    stance: "Three LAYERS for LLM obs (computational/semantic/agentic). Reuses 'pillars'/'unit tests' framing — contradicts Group A's meaning."
+    pair: pillars_count
+
+  - url: https://www.swept.ai/post/llm-observability-complete-guide
+    topic: llm
+    stance: "Explicitly: traditional obs = logs/metrics/traces; LLM obs EXTENDS with semantic eval, hallucination, drift. Six pillars."
+    pair: trad_vs_llm
+
+  - url: https://galileo.ai/blog/effective-llm-monitoring
+    topic: llm
+    stance: "Agent observability: quality/safety/cost/agentic metric families; groundedness, faithfulness, answer relevancy; runtime intervention."
+
+  - url: https://www.datadoghq.com/blog/llm-observability-hallucination-detection/
+    topic: llm
+    stance: "Concrete hallucination detection via LLM-as-judge + deterministic checks; contradictions vs omissions. Grounds the faithfulness eval."
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # OPTIONAL stretch sources (ingest only if you want a denser graph; each adds
+  # cross-links but also more pages to maintain). Comment in as needed.
+  # ─────────────────────────────────────────────────────────────────────────
+  # - url: https://uptrace.dev/glossary/llm-observability
+  #   topic: llm
+  #   stance: "LLM obs vs training-time eval vs ML obs; hallucination patterns; works even with 3rd-party APIs."
+  # - url: https://www.elastic.co/what-is/llm-observability
+  #   topic: llm
+  #   stance: "LLM obs inspects prompt versions, retrieval context, conversation state; qualitative metrics."
+  # - url: https://newsletter.pragmaticengineer.com/p/observability-the-present-and-future
+  #   topic: contrarian
+  #   stance: "Cardinality + multiplier-effect cost critique of the pillars model (Charity Majors interview)."
+  #   pair: pillars_debate
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Expected wiki shape after ingest (the writer/index stage should converge on
+# roughly these concept pages — useful as a sanity check for the demo):
+#
+#   wiki/observability/
+#     three-pillars.md            (Group A merged; notes the gaps)
+#     pillars-debate.md           (A vs B; "pillars are bullshit" vs canon — balanced)
+#     wide-events.md              (observability 2.0 / single source of truth)
+#     opentelemetry.md            (spans, traces, context propagation)
+#     sampling.md                 (head vs tail; the Group C disagreement)
+#     llm-observability.md        (what's new: non-determinism, cost, semantic eval)
+#     agent-observability.md      (traces-as-decision-paths, tool calls, multi-step)
+#     hallucination-and-evals.md  (LLM-as-judge, groundedness, faithfulness, datasets)
+#     traditional-vs-llm.md       (THE money page — the contrast your lead asked about)
+#     index.md                    (global TOC + cross-links)
+#
+# The demo question "How does LLM observability differ from traditional observability?"
+# should retrieve traditional-vs-llm.md (+ three-pillars.md, llm-observability.md) and
+# answer with citations you can personally verify.
+# ─────────────────────────────────────────────────────────────────────────────

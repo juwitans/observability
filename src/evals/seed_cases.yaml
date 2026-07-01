@@ -1,0 +1,14 @@
+# Fallback "golden set" of hard questions, used by build_dataset.py when no
+# low-faithfulness traces are found in Langfuse yet (e.g. on a fresh demo).
+# These are contestable questions the weak prompt tends to hallucinate on.
+cases:
+  - question: "How does LLM observability differ from traditional observability?"
+    notes: "Should contrast non-determinism, semantic/faithfulness eval, token cost vs. metrics/logs/traces. Must stay grounded in the wiki."
+  - question: "Are there exactly three pillars of observability?"
+    notes: "Contested: canon says metrics/logs/traces; Elastic adds profiling; Honeycomb/wide-events camp says 'no pillars'. Answer must surface the disagreement, not assert one."
+  - question: "Is tail-based sampling always better than head-based sampling?"
+    notes: "No — uptrace argues head-based as default; tail needs trace-ID load-balancing infra. Answer must attribute positions."
+  - question: "What is a wide event and why do its proponents reject the three pillars?"
+    notes: "Observability 2.0 / single source of truth thesis. Stay grounded."
+  - question: "How do you detect hallucinations in an LLM application?"
+    notes: "LLM-as-judge + deterministic checks; groundedness/faithfulness. Should cite the hallucination/evals page."

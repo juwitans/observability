@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LLM Wiki — Observability Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background: #F1EDFA;
+    font-family: 'Manrope', sans-serif;
+    color: #38334E;
+  }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #DAD3F0; border-radius: 999px; border: 3px solid transparent; background-clip: content-box; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  @keyframes blink { 0%,80%,100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-2px); } }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+  @keyframes grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  select:focus, input:focus, button:focus { outline: none; }
+  #input:focus { border-color: #B7ACE8; background: #fff; }
+  .chip:hover, .sug-chip:hover { border-color: #C9BEF0; }
+  button:disabled { opacity: .55; cursor: default; }
+</style>
+</head>
+<body>
+<div style="height: 100vh; display: flex; flex-direction: column; background: radial-gradient(1200px 600px at 12% -8%, #EDE7FB 0%, #F1EDFA 42%, #F3F0F7 100%);">
+
+  <!-- ===== TOP BAR ===== -->
+  <header style="display: flex; align-items: center; gap: 18px; padding: 14px 26px; background: rgba(255,255,255,0.78); backdrop-filter: blur(10px); border-bottom: 1px solid #E6E0F4; flex: 0 0 auto;">
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <div style="width: 38px; height: 38px; border-radius: 12px; background: linear-gradient(150deg, #A99BEA, #8B7FD6); display: flex; align-items: center; justify-content: center; position: relative; box-shadow: 0 6px 16px rgba(139,127,214,0.35);">
+        <span style="font-family: 'Space Grotesk'; font-weight: 700; color: #fff; font-size: 17px; letter-spacing: -0.5px;">W</span>
+        <span style="position: absolute; right: -3px; bottom: -3px; width: 12px; height: 12px; border-radius: 50%; background: #5FCBA4; border: 2.5px solid #fff;"></span>
+      </div>
+      <div style="display: flex; flex-direction: column; line-height: 1.1;">
+        <span style="font-family: 'Space Grotesk'; font-weight: 700; font-size: 16px; letter-spacing: -0.3px;">LLM Wiki</span>
+        <span style="font-size: 11.5px; color: #8C86A6; font-weight: 500;">Observability knowledge base</span>
+      </div>
+    </div>
+    <span style="display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; background: #E7F5EF; border: 1px solid #CBEBDD; border-radius: 999px; font-size: 11.5px; font-weight: 600; color: #2F9A74;">
+      <span style="width: 7px; height: 7px; border-radius: 50%; background: #43BA92; animation: pulse 1.8s ease-in-out infinite;"></span>Observability Demo
+    </span>
+
+    <div style="flex: 1;"></div>
+
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span style="font-size: 12px; color: #8C86A6; font-weight: 600;">Answer prompt</span>
+      <select id="variant" style="font-family: 'JetBrains Mono', monospace; font-size: 12.5px; font-weight: 500; color: #4B4468; background: #fff; border: 1px solid #DDD6EF; border-radius: 10px; padding: 8px 12px; cursor: pointer; box-shadow: 0 1px 2px rgba(80,60,140,0.05);">
+        <option value="weak">weak — hallucination-prone</option>
+        <option value="v1" selected>v1 — grounded (baseline)</option>
+        <option value="v2">v2 — strict grounding</option>
+      </select>
+    </div>
+    <button id="newSession" style="font-family: 'Manrope'; font-size: 13px; font-weight: 600; color: #6A5FBE; background: #EFEBFB; border: 1px solid #DFD8F4; border-radius: 10px; padding: 9px 14px; cursor: pointer;">＋ New session</button>
+    <span id="sessionId" style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #9089AB; background: #F2EFFA; border: 1px solid #E6E0F4; border-radius: 8px; padding: 6px 9px;"></span>
+  </header>
+
+  <!-- ===== MAIN GRID ===== -->
+  <main style="flex: 1; min-height: 0; display: flex; gap: 20px; padding: 20px 26px 24px;">
+
+    <!-- ===== CHAT (object layer) ===== -->
+    <section style="flex: 1.55; min-width: 0; display: flex; flex-direction: column; background: #FBFAFE; border: 1px solid #E9E4F5; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(94,74,160,0.06);">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 15px 20px; border-bottom: 1px solid #EFEBF8; background: #fff; flex: 0 0 auto;">
+        <span style="font-family: 'Space Grotesk'; font-weight: 700; font-size: 14px;">Conversation</span>
+        <span style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.6px; color: #7C6FD6; background: #ECE7FB; border-radius: 6px; padding: 3px 7px;">OBJECT LAYER</span>
+        <div style="flex: 1;"></div>
+        <span id="docCount" style="font-size: 12px; color: #9089AB;">grounded in the wiki</span>
+      </div>
+
+      <!-- quick prompts -->
+      <div id="suggest" style="display: flex; flex-wrap: wrap; gap: 8px; padding: 13px 20px 4px; flex: 0 0 auto;"></div>
+
+      <!-- messages -->
+      <div id="messages" style="flex: 1; min-height: 0; overflow-y: auto; padding: 18px 20px 8px; display: flex; flex-direction: column; gap: 22px;"></div>
+
+      <!-- input -->
+      <div style="flex: 0 0 auto; padding: 14px 20px 16px; border-top: 1px solid #EFEBF8; background: #fff;">
+        <div style="display: flex; gap: 10px; align-items: flex-end;">
+          <input id="input" placeholder="Ask about observability…" autocomplete="off" style="flex: 1; font-family: 'Manrope'; font-size: 14.5px; color: #38334E; background: #F6F4FC; border: 1px solid #E4DEF3; border-radius: 12px; padding: 13px 16px;" />
+          <button id="send" style="font-family: 'Manrope'; font-size: 14px; font-weight: 600; color: #fff; background: linear-gradient(150deg, #9B8DE6, #8375D2); border: none; border-radius: 12px; padding: 13px 22px; cursor: pointer; box-shadow: 0 6px 16px rgba(131,117,210,0.35);">Send</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== TRACE PANEL (meta layer) ===== -->
+    <aside style="flex: 0 0 400px; display: flex; flex-direction: column; background: #FBFAFE; border: 1px solid #E9E4F5; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(94,74,160,0.06);">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 15px 18px; border-bottom: 1px solid #EFEBF8; background: #fff; flex: 0 0 auto;">
+        <span style="font-family: 'Space Grotesk'; font-weight: 700; font-size: 14px;">Trace</span>
+        <span style="font-size: 10.5px; font-weight: 700; letter-spacing: 0.6px; color: #2F9A74; background: #E4F4EC; border-radius: 6px; padding: 3px 7px;">META LAYER</span>
+        <div style="flex: 1;"></div>
+        <a id="sessionLink" href="#" target="_blank" style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #7C6FD6; text-decoration: none; display: none;">▸ session replay</a>
+      </div>
+      <div id="tracePanel" style="flex: 1; min-height: 0; overflow-y: auto; padding: 18px;"></div>
+    </aside>
+  </main>
+</div>
+
+<script>
+const SUGGESTIONS = [
+  "How does LLM observability differ from traditional observability?",
+  "Are there exactly three pillars of observability?",
+  "Is tail-based sampling always better than head-based?",
+  "How do you detect hallucinations in an LLM app?",
+];
+const SPAN_COLORS = {
+  retrieve_context: "#9E93E0",
+  generate_answer:  "#F0966F",
+  faithfulness_eval:"#4FBF9C",
+};
+
+const $ = s => document.querySelector(s);
+const messagesEl = $("#messages");
+const tracePanel = $("#tracePanel");
+
+let state = {
+  sessionId: newSessionId(),
+  messages: [],       // {role:'user',text} | {role:'bot',blocks,tel}
+  selected: -1,       // index of bot message whose trace is shown
+  thinking: false,
+  sessionUrl: null,
+};
+
+function newSessionId() { return "web-" + Math.random().toString(16).slice(2, 8); }
+
+// ── faithfulness color scale (matches the design) ──────────────────────────
+const faithColor = f => f >= 0.85 ? "#33A87D" : f >= 0.7 ? "#7C6FD6" : "#DD8A55";
+const faithSoft  = f => f >= 0.85 ? "#E3F4EC" : f >= 0.7 ? "#EDE8FB" : "#FBEADF";
+const faithLine  = f => f >= 0.85 ? "#C9EBDB" : f >= 0.7 ? "#E0D8F4" : "#F5D8C4";
+const faithBand  = f => f >= 0.85 ? "strong grounding" : f >= 0.7 ? "grounded" : "weak grounding";
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+}
+function fmt(s) { return escapeHtml(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>"); }
+
+// Turn a plain/markdown-ish answer into typed blocks for the assistant bubble.
+function parseBlocks(text) {
+  const out = [];
+  (text || "").split(/\n+/).forEach(raw => {
+    const line = raw.trim();
+    if (!line) return;
+    if (/^#{1,6}\s+/.test(line)) return out.push({ t: "h", text: line.replace(/^#{1,6}\s+/, "") });
+    if (/^\d+[.)]\s+/.test(line)) return out.push({ t: "li", text: line.replace(/^\d+[.)]\s+/, "") });
+    if (/^[-*•]\s+/.test(line)) return out.push({ t: "li", text: line.replace(/^[-*•]\s+/, "") });
+    if (/^\*\*[^*]+\*\*:?$/.test(line)) return out.push({ t: "h", text: line.replace(/\*\*/g, "").replace(/:$/, "") });
+    out.push({ t: "p", text: line });
+  });
+  return out.length ? out : [{ t: "p", text: text || "" }];
+}
+
+// ── render conversation ────────────────────────────────────────────────────
+function renderMessages() {
+  const parts = [];
+
+  if (state.messages.length === 0 && !state.thinking) {
+    parts.push(`
+      <div style="margin: auto; text-align: center; color: #9E97BA; max-width: 320px;">
+        <div style="font-size: 30px; margin-bottom: 6px;">✳︎</div>
+        <div style="font-family: 'Space Grotesk'; font-weight: 600; color: #6E668F; font-size: 15px; margin-bottom: 4px;">Fresh session</div>
+        <div style="font-size: 13px; line-height: 1.5;">Ask a question to start a traced turn. Every answer is scored for faithfulness against the retrieved context.</div>
+      </div>`);
+  }
+
+  state.messages.forEach((m, i) => {
+    if (m.role === "user") {
+      parts.push(`
+        <div style="display: flex; justify-content: flex-end;">
+          <div style="max-width: 74%;">
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 500; letter-spacing: 0.5px; color: #A79FC4; text-align: right; margin-bottom: 5px;">YOU</div>
+            <div style="background: linear-gradient(160deg, #EDE8FB, #E6DFF8); color: #443D63; border: 1px solid #E0D8F4; border-radius: 16px 16px 4px 16px; padding: 12px 16px; font-size: 14.5px; line-height: 1.5; font-weight: 500;">${escapeHtml(m.text)}</div>
+          </div>
+        </div>`);
+      return;
+    }
+    // bot
+    const f = m.tel ? m.tel.faithfulness : 0;
+    const blocks = m.blocks.map(b => {
+      if (b.t === "h") return `<div style="font-family: 'Space Grotesk'; font-weight: 700; font-size: 13.5px; color: #38334E; margin-top: 6px;">${fmt(b.text)}</div>`;
+      if (b.t === "li") return `<div style="font-size: 14.5px; line-height: 1.6; color: #4C466A; padding-left: 16px; position: relative;"><span style="position: absolute; left: 2px; color: #A99BEA;">•</span>${fmt(b.text)}</div>`;
+      return `<div style="font-size: 14.5px; line-height: 1.68; color: #4C466A;">${fmt(b.text)}</div>`;
+    }).join("");
+    const cites = (m.tel && m.tel.cited_slugs && m.tel.cited_slugs.length)
+      ? `<span style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: #9089AB;">cites ${m.tel.cited_slugs.map(escapeHtml).join(" · ")}</span>` : "";
+    parts.push(`
+      <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 8px; max-width: 86%;">
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; font-weight: 500; letter-spacing: 0.5px; color: #A79FC4;">ASSISTANT</div>
+        <div style="background: #fff; border: 1px solid #EAE5F6; border-radius: 4px 16px 16px 16px; padding: 17px 20px; display: flex; flex-direction: column; gap: 9px; box-shadow: 0 4px 14px rgba(94,74,160,0.05);">${blocks}</div>
+        <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <span style="display: inline-flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; padding: 4px 9px; border-radius: 999px; color: ${faithColor(f)}; background: ${faithSoft(f)};"><span style="width: 6px; height: 6px; border-radius: 50%; background: ${faithColor(f)};"></span>faithfulness ${f.toFixed(2)}</span>
+          <button data-view="${i}" style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; color: #7C6FD6; background: transparent; border: 1px solid #E0D8F4; border-radius: 999px; padding: 4px 10px; cursor: pointer;">view trace →</button>
+          ${cites}
+        </div>
+      </div>`);
+  });
+
+  if (state.thinking) {
+    parts.push(`
+      <div style="display: flex; flex-direction: column; align-items: flex-start; gap: 8px;">
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 10.5px; letter-spacing: 0.5px; color: #A79FC4;">ASSISTANT</div>
+        <div style="background: #fff; border: 1px solid #EAE5F6; border-radius: 4px 16px 16px 16px; padding: 15px 18px; display: flex; gap: 5px; align-items: center;">
+          <span style="width: 7px; height: 7px; border-radius: 50%; background: #B7ACE8; animation: blink 1.2s infinite 0s;"></span>
+          <span style="width: 7px; height: 7px; border-radius: 50%; background: #B7ACE8; animation: blink 1.2s infinite .2s;"></span>
+          <span style="width: 7px; height: 7px; border-radius: 50%; background: #B7ACE8; animation: blink 1.2s infinite .4s;"></span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #A79FC4; margin-left: 6px;">retrieving · generating · scoring</span>
+        </div>
+      </div>`);
+  }
+
+  messagesEl.innerHTML = parts.join("");
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+}
+
+// ── render trace panel ──────────────────────────────────────────────────────
+function renderTrace() {
+  const sel = state.messages[state.selected];
+  const t = sel && sel.role === "bot" ? sel.tel : null;
+
+  if (!t) {
+    tracePanel.innerHTML = `
+      <div style="margin-top: 60px; text-align: center; color: #A49DBE; padding: 0 20px;">
+        <div style="font-size: 26px; margin-bottom: 8px;">◔</div>
+        <div style="font-size: 13px; line-height: 1.55;">Run a question, then open its trace to inspect spans, tokens, cost and eval scores.</div>
+      </div>`;
+    return;
+  }
+
+  const f = t.faithfulness;
+  const total = t.spans.reduce((a, s) => a + s.ms, 0) || 1;
+  let cum = 0;
+  const spans = t.spans.map(s => {
+    const offset = (cum / total) * 100;
+    cum += s.ms;
+    const color = SPAN_COLORS[s.name] || "#9E93E0";
+    return `
+      <div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #5A5378;">${escapeHtml(s.name)}</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #9089AB;">${s.ms}ms</span>
+        </div>
+        <div style="position: relative; height: 8px; background: #F0ECF9; border-radius: 999px; overflow: hidden;">
+          <div style="position: absolute; top: 0; left: ${offset}%; width: ${(s.ms / total) * 100}%; height: 100%; background: ${color}; border-radius: 999px;"></div>
+        </div>
+      </div>`;
+  }).join("");
+
+  const evals = [
+    { name: "faithfulness", value: f, color: faithColor(f) },
+    { name: "answer relevance", value: t.answer_relevance, color: "#7C6FD6" },
+  ].map(e => `
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span style="font-size: 12.5px; color: #5A5378; width: 108px; flex: 0 0 auto;">${e.name}</span>
+      <div style="flex: 1; height: 7px; background: #F0ECF9; border-radius: 999px; overflow: hidden;">
+        <div style="height: 100%; width: ${e.value * 100}%; background: ${e.color}; border-radius: 999px;"></div>
+      </div>
+      <span style="font-family: 'JetBrains Mono', monospace; font-size: 11.5px; color: #5A5378; width: 34px; text-align: right; flex: 0 0 auto;">${e.value.toFixed(2)}</span>
+    </div>`).join("");
+
+  const latency = (total / 1000).toFixed(2) + "s";
+  const cost = t.cost_usd != null ? "$" + Number(t.cost_usd).toFixed(4) : "—";
+  const traceIdEl = t.trace_url
+    ? `<a href="${t.trace_url}" target="_blank" style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #7C6FD6; text-decoration: none;">trace ${escapeHtml(t.trace_id || "").slice(0, 12)} ↗</a>`
+    : `<span style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: #6E668F;">trace ${escapeHtml(t.trace_id || "—").slice(0, 12)}</span>`;
+
+  const metric = (label, value) => `
+    <div style="background: #fff; border: 1px solid #ECE7F7; border-radius: 12px; padding: 12px 13px;">
+      <div style="font-size: 11px; color: #9089AB; font-weight: 600; margin-bottom: 5px;">${label}</div>
+      <div style="font-family: 'JetBrains Mono', monospace; font-size: 19px; font-weight: 600; color: #38334E;">${value}</div>
+    </div>`;
+
+  tracePanel.innerHTML = `
+    <div>
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+        ${traceIdEl}
+        <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: #7C6FD6; background: #ECE7FB; border-radius: 6px; padding: 3px 8px;">${escapeHtml(t.variant)}</span>
+      </div>
+
+      <div style="background: ${faithSoft(f)}; border: 1px solid ${faithLine(f)}; border-radius: 16px; padding: 16px 18px; margin-bottom: 14px;">
+        <div style="display: flex; align-items: baseline; justify-content: space-between;">
+          <span style="font-size: 12px; font-weight: 600; color: #6E668F;">Faithfulness score</span>
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: ${faithColor(f)};">${faithBand(f)}</span>
+        </div>
+        <div style="display: flex; align-items: baseline; gap: 8px; margin: 6px 0 10px;">
+          <span style="font-family: 'JetBrains Mono', monospace; font-size: 36px; font-weight: 600; color: ${faithColor(f)}; line-height: 1;">${f.toFixed(2)}</span>
+          <span style="font-size: 13px; color: #9089AB;">/ 1.00</span>
+        </div>
+        <div style="height: 8px; border-radius: 999px; background: rgba(255,255,255,0.7); overflow: hidden;">
+          <div style="height: 100%; width: ${f * 100}%; background: ${faithColor(f)}; border-radius: 999px; transform-origin: left; animation: grow .5s ease-out forwards;"></div>
+        </div>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px;">
+        ${metric("Latency", latency)}
+        ${metric("Cost", cost)}
+        ${metric("Tokens in", t.tokens_in)}
+        ${metric("Tokens out", t.tokens_out)}
+      </div>
+
+      <div style="font-size: 12px; font-weight: 700; letter-spacing: 0.3px; color: #6E668F; margin-bottom: 10px;">SPANS</div>
+      <div style="display: flex; flex-direction: column; gap: 9px; margin-bottom: 20px;">${spans}</div>
+
+      <div style="font-size: 12px; font-weight: 700; letter-spacing: 0.3px; color: #6E668F; margin-bottom: 10px;">EVALUATIONS</div>
+      <div style="display: flex; flex-direction: column; gap: 11px;">${evals}</div>
+    </div>`;
+}
+
+function render() { renderMessages(); renderTrace(); }
+
+// ── networking ──────────────────────────────────────────────────────────────
+async function send(q) {
+  const text = (q != null ? q : $("#input").value).trim();
+  if (!text || state.thinking) return;
+  $("#input").value = "";
+  state.messages.push({ role: "user", text });
+  state.thinking = true;
+  $("#send").disabled = true;
+  render();
+
+  try {
+    const res = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: text, session_id: state.sessionId, variant: $("#variant").value }),
+    });
+    const data = await res.json();
+    state.sessionId = data.session_id;
+    $("#sessionId").textContent = data.session_id;
+    setSessionLink(data.session_url);
+
+    const tel = {
+      faithfulness: data.faithfulness,
+      answer_relevance: data.answer_relevance,
+      cited_slugs: data.cited_slugs || [],
+      spans: data.spans || [],
+      tokens_in: data.tokens_in || 0,
+      tokens_out: data.tokens_out || 0,
+      cost_usd: data.cost_usd,
+      latency_ms: data.latency_ms || 0,
+      variant: data.variant || $("#variant").value,
+      trace_id: data.trace_id,
+      trace_url: data.trace_url,
+    };
+    state.messages.push({ role: "bot", blocks: parseBlocks(data.answer), tel });
+    state.selected = state.messages.length - 1;
+  } catch (e) {
+    state.messages.push({ role: "bot", blocks: [{ t: "p", text: "⚠️ error: " + String(e) }], tel: null });
+  } finally {
+    state.thinking = false;
+    $("#send").disabled = false;
+    render();
+    $("#input").focus();
+  }
+}
+
+function setSessionLink(url) {
+  const a = $("#sessionLink");
+  if (url) { a.href = url; a.style.display = "inline"; state.sessionUrl = url; }
+}
+
+function resetSession() {
+  state.sessionId = newSessionId();
+  state.messages = [];
+  state.selected = -1;
+  state.thinking = false;
+  $("#sessionId").textContent = state.sessionId;
+  $("#sessionLink").style.display = "none";
+  render();
+  $("#input").focus();
+}
+
+// ── wiring ──────────────────────────────────────────────────────────────────
+messagesEl.addEventListener("click", e => {
+  const btn = e.target.closest("[data-view]");
+  if (btn) { state.selected = +btn.dataset.view; renderTrace(); }
+});
+$("#send").onclick = () => send();
+$("#input").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); send(); } });
+$("#newSession").onclick = resetSession;
+
+const sug = $("#suggest");
+SUGGESTIONS.forEach(label => {
+  const c = document.createElement("button");
+  c.className = "sug-chip";
+  c.textContent = label;
+  c.style.cssText = "font-family: 'Manrope'; font-size: 12.5px; font-weight: 500; color: #574F79; background: #F1EEFB; border: 1px solid #E3DDF4; border-radius: 999px; padding: 7px 13px; cursor: pointer; text-align: left;";
+  c.onclick = () => send(label);
+  sug.appendChild(c);
+});
+
+$("#sessionId").textContent = state.sessionId;
+fetch("/api/info").then(r => r.json()).then(d => {
+  if (d && typeof d.doc_count === "number") $("#docCount").textContent = `grounded in ${d.doc_count} wiki docs`;
+}).catch(() => {});
+
+render();
+$("#input").focus();
+</script>
+</body>
+</html>

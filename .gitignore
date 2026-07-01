@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
+raw/
+wiki/
+*.egg-info/
+TODO.md
+IMPLEMENTATION.md

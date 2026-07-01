@@ -1,0 +1,10 @@
+# LLM Wiki Observability POC
+langfuse>=3.0.0          # v4-era SDK (OTel-based, observation-centric)
+openai>=1.40.0          # OpenAI-compatible client (any base_url)
+pydantic>=2.6.0         # typed contracts between pipeline stages
+httpx>=0.27.0           # source fetch
+trafilatura>=1.9.0      # HTML -> clean markdown extraction
+PyYAML>=6.0             # sources.yaml
+python-dotenv>=1.0.0    # load .env
+fastapi>=0.110.0        # demo chat web UI
+uvicorn>=0.29.0         # ASGI server for the web UI
