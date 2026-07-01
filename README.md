@@ -135,10 +135,38 @@ scripts/        # serve, ingest_all, chat_cli, and setup checks
 sources.yaml    # the curated corpus of source URLs
 ```
 
-## Portability
+## Point it at a different corpus
 
-Because instrumentation is confined to `obs.py` / `llm.py` and the corpus is just
-`sources.yaml` + `raw/`, the same pipeline can be re-pointed at a completely different
-(even bilingual) corpus with **zero changes to the tracing code** — you only swap the
-sources. That swap is itself the proof that the observability layer is model-,
-framework-, and domain-agnostic.
+The pipeline is domain-agnostic — to make the chatbot answer about something else, you
+only edit **`sources.yaml`** and re-run ingest. No tracing or app code changes.
+
+1. Replace the entries in `sources.yaml` with your own sources:
+
+   ```yaml
+   sources:
+     - url: https://example.com/some-article
+       topic: llm            # required; see the constraint below
+       stance: "…"           # optional human note (ignored by the loader)
+   ```
+
+2. Rebuild the corpus:
+
+   ```bash
+   python -m scripts.ingest_all
+   ```
+
+3. Run the chat UI — it now answers from the new pages.
+
+Things to know:
+
+- **`raw/` and `wiki/` are generated, not hand-edited.** Ingest fetches each URL,
+  writes the cleaned markdown to `raw/`, and compiles cross-linked pages into `wiki/`.
+  Both are regenerated on every run (and are gitignored).
+- **`topic` must be one of** `traditional`, `otel`, `llm`, or `contrarian` (defined in
+  `src/schemas.py`). Map your sources onto those, or edit that one line to use your own
+  set of topics.
+- Sources must be **fetchable public URLs** — the pipeline downloads and extracts the
+  main article body at ingest time.
+
+Swapping the corpus with zero instrumentation changes is itself the point: it shows the
+observability layer is model-, framework-, and domain-agnostic.
