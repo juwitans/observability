@@ -16,9 +16,25 @@ _HEADERS = {
 
 def fetch_source(url: str, timeout: float = 30.0) -> FetchResult:
     with obs.span("fetch_source", input={"url": url}):
-        resp = httpx.get(url, follow_redirects=True, timeout=timeout, headers=_HEADERS)
-        html = resp.text
-        byte_size = len(html.encode("utf-8", errors="ignore"))
+        # The downstream HTTP call gets its OWN child span so it nests under the
+        # stage instead of being opaque inside it (OBSERVABILITY_INSTRUMENTATION.md
+        # §1/§3: downstream DB/HTTP spans nest under their tool/stage span). httpx
+        # is not OTel-auto-instrumented here, so we emit it manually using the OTel
+        # http.*/url.* attribute names.
+        with obs.span(
+            "http_get", metadata={"http.request.method": "GET", "url.full": url}
+        ):
+            resp = httpx.get(
+                url, follow_redirects=True, timeout=timeout, headers=_HEADERS
+            )
+            html = resp.text
+            byte_size = len(html.encode("utf-8", errors="ignore"))
+            obs.update_span(
+                output={
+                    "http.response.status_code": resp.status_code,
+                    "http.response.body.size": byte_size,
+                }
+            )
         result = FetchResult(
             url=url, status=resp.status_code, byte_size=byte_size, html=html
         )

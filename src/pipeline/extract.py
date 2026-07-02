@@ -70,7 +70,7 @@ def extract_md(url: str, html: str) -> ExtractResult:
         result = ExtractResult(url=url, markdown=markdown, char_length=len(markdown))
         obs.update_span(
             output={"char_length": len(markdown), "preview": markdown[:500]},
-            metadata={"extractor": extractor},
+            metadata={"wiki.extract.extractor": extractor},  # private namespace, §6
         )
         if len(markdown) < _MIN_CHARS:
             obs.update_span(

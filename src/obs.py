@@ -20,6 +20,17 @@ from dotenv import load_dotenv
 
 load_dotenv()  # pull .env into the environment before the client reads it
 
+# Pin the OTel GenAI semantic-convention generation before importing anything
+# OTel-based (OBSERVABILITY_INSTRUMENTATION.md §5 "Version-churn management":
+# emit current-generation agent/tool span names and treat drift as a config
+# knob, not a rewrite). setdefault so a real .env value still wins.
+os.environ.setdefault("OTEL_SEMCONV_STABILITY_OPT_IN", "gen_ai_latest_experimental")
+
+# Private attribute namespace for domain concepts the GenAI spec doesn't cover
+# (OBSERVABILITY_INSTRUMENTATION.md §6). Never shadow a `gen_ai.*` key; prefix
+# everything custom with this so a future OTel addition can't collide.
+PRIVATE_NS = "wiki"
+
 # The single langfuse import surface for the whole project.
 from langfuse import Evaluation, get_client, observe, propagate_attributes  # noqa: E402,F401
 

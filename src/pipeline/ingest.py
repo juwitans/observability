@@ -62,7 +62,7 @@ def ingest_source(url: str, topic: str) -> IngestOutcome:
             while _needs_repair(verdict, lint) and repairs < MAX_REPAIRS:
                 repairs += 1
                 obs.update_span(
-                    metadata={"repair_round": repairs},
+                    metadata={"wiki.repair.round": repairs},  # private namespace, §6
                     level="WARNING",
                     status_message=f"Repair round {repairs} triggered",
                 )

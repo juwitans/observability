@@ -9,7 +9,13 @@ from ..schemas import ChatChunk
 
 
 def retrieve_context(query: str, top_k: int = 3) -> list[ChatChunk]:
-    with obs.span("retrieve_context", input={"query": query, "top_k": top_k}):
+    with obs.span(
+        "retrieve_context",
+        input={"query": query, "top_k": top_k},
+        # Identify the grounding source on the RAG span (OTel GenAI convention;
+        # OBSERVABILITY_INSTRUMENTATION.md §1/§2 "Retrieval / RAG span").
+        metadata={"gen_ai.data_source.id": "wiki"},
+    ):
         hits = retrieval.search(query, top_k=top_k)
         chunks = [ChatChunk(**h) for h in hits]
         obs.update_span(
