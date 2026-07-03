@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LLM Wiki — Agent Observability POC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#121019; --bg2:#1A1626; --panel:#1E1A2B; --panel2:#241F33;
+    --border:#322B48; --border-soft:#2A2440;
+    --ink:#EDE9F8; --body:#C6BFDD; --muted:#8E87AC; --faint:#6D6689;
+    --violet:#A99BEA; --violet-br:#BBAFf2; --violet-dp:#8B7FD6;
+    --green:#5FCBA4; --orange:#F0966F; --blue:#7FB0EA;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    background:var(--bg); color:var(--body);
+    font-family:'Manrope',sans-serif; overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::-webkit-scrollbar{width:9px;height:9px;}
+  ::-webkit-scrollbar-thumb{background:#382F52;border-radius:999px;border:2px solid transparent;background-clip:content-box;}
+  ::-webkit-scrollbar-track{background:transparent;}
+
+  .stage{
+    position:fixed; inset:0;
+    background:
+      radial-gradient(1100px 620px at 12% -10%, #241C3B 0%, #171325 45%, #121019 100%);
+    display:flex; flex-direction:column;
+  }
+
+  /* ── top bar ─────────────────────────────────────────── */
+  .top{
+    display:flex; align-items:center; gap:14px;
+    padding:14px 30px; flex:0 0 auto;
+    border-bottom:1px solid var(--border-soft);
+    background:rgba(20,17,30,0.6); backdrop-filter:blur(10px);
+  }
+  .logo{
+    width:34px;height:34px;border-radius:11px;
+    background:linear-gradient(150deg,#A99BEA,#7A6DC8);
+    display:flex;align-items:center;justify-content:center;position:relative;
+    box-shadow:0 6px 16px rgba(139,127,214,0.4);
+  }
+  .logo span{font-family:'Space Grotesk';font-weight:700;color:#fff;font-size:16px;letter-spacing:-.5px;}
+  .logo::after{content:"";position:absolute;right:-3px;bottom:-3px;width:11px;height:11px;border-radius:50%;background:var(--green);border:2.5px solid var(--bg);}
+  .brand-t{font-family:'Space Grotesk';font-weight:700;font-size:15px;color:var(--ink);letter-spacing:-.3px;}
+  .brand-s{font-size:11px;color:var(--muted);font-weight:500;}
+  .badge{
+    display:inline-flex;align-items:center;gap:7px;padding:5px 11px;
+    background:rgba(95,203,164,0.12);border:1px solid rgba(95,203,164,0.3);
+    border-radius:999px;font-size:11px;font-weight:600;color:var(--green);
+  }
+  .badge .dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse 1.8s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+  .counter{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);}
+  .counter b{color:var(--violet-br);font-weight:600;}
+
+  /* ── slide viewport ──────────────────────────────────── */
+  .viewport{flex:1;min-height:0;position:relative;}
+  .slide{
+    position:absolute; inset:0;
+    padding:34px 60px 30px; overflow-y:auto;
+    display:none; flex-direction:column;
+    animation:fade .45s ease;
+  }
+  .slide.active{display:flex;}
+  @keyframes fade{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+  .slide-inner{width:100%;max-width:1120px;margin:0 auto;}
+
+  .kicker{
+    font-family:'JetBrains Mono',monospace;font-size:11.5px;font-weight:600;
+    letter-spacing:1.5px;color:var(--violet);text-transform:uppercase;margin-bottom:12px;
+    display:flex;align-items:center;gap:9px;
+  }
+  .kicker::before{content:"";width:26px;height:2px;background:var(--violet-dp);border-radius:2px;}
+  h1{font-family:'Space Grotesk';font-weight:700;font-size:40px;line-height:1.08;letter-spacing:-1px;color:var(--ink);margin:0 0 14px;}
+  h2{font-family:'Space Grotesk';font-weight:700;font-size:30px;line-height:1.12;letter-spacing:-.6px;color:var(--ink);margin:0 0 8px;}
+  .lead{font-size:16.5px;line-height:1.6;color:var(--body);max-width:820px;}
+  .lead-sm{font-size:14.5px;line-height:1.6;color:var(--muted);max-width:840px;margin-top:6px;}
+  p{margin:0;}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+  .card{
+    background:var(--panel);border:1px solid var(--border);border-radius:16px;
+    padding:18px 20px; box-shadow:0 10px 30px rgba(0,0,0,0.22);
+  }
+  .card h3{font-family:'Space Grotesk';font-weight:600;font-size:15.5px;color:var(--ink);margin:0 0 7px;display:flex;align-items:center;gap:8px;}
+  .card p{font-size:13.5px;line-height:1.55;color:var(--muted);}
+  .card .ic{font-size:16px;}
+
+  .tag{
+    display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;
+    font-size:11px;font-weight:500;padding:3px 9px;border-radius:999px;
+    background:rgba(169,155,234,0.12);color:var(--violet);border:1px solid rgba(169,155,234,0.25);
+  }
+  .tag.g{background:rgba(95,203,164,0.12);color:var(--green);border-color:rgba(95,203,164,0.28);}
+  .tag.o{background:rgba(240,150,111,0.12);color:var(--orange);border-color:rgba(240,150,111,0.28);}
+  .tag.b{background:rgba(127,176,234,0.12);color:var(--blue);border-color:rgba(127,176,234,0.28);}
+  .mono{font-family:'JetBrains Mono',monospace;}
+  code{font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--violet-br);background:rgba(169,155,234,0.1);padding:1px 6px;border-radius:5px;border:1px solid rgba(169,155,234,0.16);}
+
+  /* ── table ───────────────────────────────────────────── */
+  table{width:100%;border-collapse:collapse;font-size:13.5px;}
+  th{text-align:left;font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--faint);padding:0 14px 10px;border-bottom:1px solid var(--border);}
+  td{padding:12px 14px;border-bottom:1px solid var(--border-soft);vertical-align:top;color:var(--body);line-height:1.45;}
+  tr:last-child td{border-bottom:none;}
+  td .role{font-family:'Space Grotesk';font-weight:600;color:var(--ink);}
+  td small{display:block;color:var(--muted);font-size:12px;margin-top:2px;}
+
+  /* ── trace tree ──────────────────────────────────────── */
+  .tree{font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.9;}
+  .node{display:flex;align-items:center;gap:9px;padding:1px 0;}
+  .node .dot{width:9px;height:9px;border-radius:3px;flex:0 0 auto;}
+  .node .nm{color:var(--ink);}
+  .node .ty{font-size:9.5px;font-weight:600;letter-spacing:.4px;padding:1px 6px;border-radius:5px;text-transform:uppercase;}
+  .node .note{color:var(--faint);font-size:11px;}
+  .ty.span{background:rgba(158,147,224,0.14);color:#B4A9EC;}
+  .ty.gen{background:rgba(240,150,111,0.16);color:#F3A886;}
+  .indent{border-left:1px solid var(--border);margin-left:5px;padding-left:16px;}
+
+  .list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:9px;}
+  .list li{display:flex;gap:10px;font-size:14px;line-height:1.5;color:var(--body);}
+  .list li .b{color:var(--violet);flex:0 0 auto;margin-top:1px;}
+  .list li b{color:var(--ink);font-weight:600;}
+
+  .flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;}
+  .flow .step{
+    flex:1;min-width:150px;background:var(--panel);border:1px solid var(--border);
+    border-radius:14px;padding:15px 16px;position:relative;
+  }
+  .flow .arrow{display:flex;align-items:center;justify-content:center;color:var(--violet-dp);font-size:20px;padding:0 6px;flex:0 0 auto;}
+  .flow .step .n{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--faint);margin-bottom:6px;}
+  .flow .step h4{font-family:'Space Grotesk';font-weight:600;font-size:14.5px;color:var(--ink);margin:0 0 5px;}
+  .flow .step p{font-size:12px;line-height:1.45;color:var(--muted);}
+
+  .note{
+    margin-top:16px;padding:12px 16px;border-radius:12px;font-size:13px;line-height:1.55;
+    background:rgba(240,150,111,0.07);border:1px solid rgba(240,150,111,0.22);color:#E7B79E;
+  }
+  .note.v{background:rgba(169,155,234,0.07);border-color:rgba(169,155,234,0.22);color:#C3B8EE;}
+  .note.g{background:rgba(95,203,164,0.07);border-color:rgba(95,203,164,0.22);color:#A6E0CB;}
+  .note b{color:#fff;font-weight:600;}
+
+  .stat{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:15px 17px;}
+  .stat .v{font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:600;color:var(--ink);line-height:1;}
+  .stat .l{font-size:12px;color:var(--muted);margin-top:7px;line-height:1.4;}
+  .stat .v.grn{color:var(--green);} .stat .v.vio{color:var(--violet-br);} .stat .v.org{color:var(--orange);}
+
+  /* ── bottom nav ──────────────────────────────────────── */
+  .nav{
+    display:flex;align-items:center;gap:16px;padding:13px 30px;flex:0 0 auto;
+    border-top:1px solid var(--border-soft);background:rgba(20,17,30,0.6);backdrop-filter:blur(10px);
+  }
+  .progress{flex:1;height:4px;background:#2A2440;border-radius:999px;overflow:hidden;}
+  .progress .fill{height:100%;background:linear-gradient(90deg,#8B7FD6,#A99BEA);border-radius:999px;transition:width .4s ease;}
+  .dots{display:flex;gap:7px;}
+  .dots i{width:7px;height:7px;border-radius:50%;background:#3A3356;cursor:pointer;transition:all .25s;}
+  .dots i.on{background:var(--violet);width:20px;border-radius:999px;}
+  .btn{
+    font-family:'Manrope';font-size:13px;font-weight:600;color:var(--violet-br);
+    background:rgba(169,155,234,0.1);border:1px solid rgba(169,155,234,0.28);
+    border-radius:10px;padding:8px 15px;cursor:pointer;transition:all .2s;
+  }
+  .btn:hover{background:rgba(169,155,234,0.18);}
+  .btn:disabled{opacity:.35;cursor:default;}
+  .hint{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--faint);}
+
+  .titlewrap{flex:1;display:flex;flex-direction:column;justify-content:center;}
+  .duo{display:flex;gap:28px;flex-wrap:wrap;margin-top:22px;}
+  .duo .layer{flex:1;min-width:260px;border-radius:16px;padding:20px 22px;border:1px solid var(--border);background:var(--panel);}
+  .duo .layer .cap{font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:700;letter-spacing:.6px;padding:3px 8px;border-radius:6px;display:inline-block;margin-bottom:10px;}
+  .duo .obj .cap{background:rgba(169,155,234,0.16);color:var(--violet);}
+  .duo .meta .cap{background:rgba(95,203,164,0.14);color:var(--green);}
+  .duo h3{font-family:'Space Grotesk';font-weight:700;font-size:19px;color:var(--ink);margin:0 0 8px;}
+  .duo p{font-size:13.5px;line-height:1.55;color:var(--muted);}
+
+  @media (max-width:760px){
+    .slide{padding:24px 22px;} h1{font-size:30px;} h2{font-size:23px;}
+    .grid2,.grid3{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+
+  <!-- top bar -->
+  <div class="top">
+    <div class="logo"><span>W</span></div>
+    <div style="display:flex;flex-direction:column;line-height:1.15;">
+      <span class="brand-t">LLM Wiki</span>
+      <span class="brand-s">Agent Observability POC · walkthrough</span>
+    </div>
+    <span class="badge"><span class="dot"></span>Langfuse · self-hosted</span>
+    <div style="flex:1;"></div>
+    <span class="counter"><b id="cur">01</b> / <span id="tot">10</span></span>
+  </div>
+
+  <!-- slides -->
+  <div class="viewport" id="viewport">
+
+    <!-- 1 · TITLE -->
+    <section class="slide active">
+      <div class="slide-inner titlewrap">
+        <div class="kicker">Observability for LLM apps</div>
+        <h1>Watching an LLM pipeline<br>from the inside out</h1>
+        <p class="lead">A self-contained POC that ingests source articles into a cross-linked wiki and answers questions grounded in it — with <b style="color:var(--ink)">every stage traced</b>, every answer scored for hallucination, and flagged traces recycled into evaluation datasets.</p>
+        <div class="duo">
+          <div class="layer obj">
+            <span class="cap">OBJECT LAYER</span>
+            <h3>The wiki app</h3>
+            <p>An ingest pipeline + a grounded chat front end. This is the thing being observed — fixed-function, no magic.</p>
+          </div>
+          <div class="layer meta">
+            <span class="cap">META LAYER</span>
+            <h3>The telemetry</h3>
+            <p>Langfuse (OpenTelemetry-based) records the trace tree, tokens, cost, latency and eval scores of that pipeline.</p>
+          </div>
+        </div>
+        <p class="lead-sm">All instrumentation lives in two files — <code>src/obs.py</code> (traces/scores/sessions) and <code>src/llm.py</code> (the one LLM wrapper). Model, provider and corpus are swappable without touching any tracing code.</p>
+      </div>
+    </section>
+
+    <!-- 2 · AGENTS / ROLES -->
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">What "agents" exist here</div>
+        <h2>Six LLM roles — each one prompt, one model, one traced call</h2>
+        <p class="lead-sm" style="margin-bottom:18px;">Honest framing: these are <b style="color:var(--body)">fixed-function roles</b>, not autonomous tool-calling agents. There's no dynamic tool selection, MCP, or sub-agents (deliberate POC scope). Each role is hand-wrapped as a Langfuse <span class="tag o">generation</span> so its model / tokens / cost are captured automatically.</p>
+        <div class="card" style="padding:6px 6px;">
+        <table>
+          <thead><tr><th>Role</th><th>Stage · span</th><th>Model</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td><span class="role">Writer</span></td><td class="mono">write_page</td><td class="mono" style="color:var(--violet)">LLM_MODEL</td><td>Drafts a compiled wiki page from the cleaned source + related pages.</td></tr>
+            <tr><td><span class="role">Judge</span> <small>ingest</small></td><td class="mono">judge_page</td><td class="mono" style="color:var(--green)">LLM_JUDGE_MODEL</td><td>LLM-as-judge: scores <code>groundedness</code> + <code>faithful</code>, lists issues.</td></tr>
+            <tr><td><span class="role">Repair</span> <small>conditional</small></td><td class="mono">repair_page</td><td class="mono" style="color:var(--violet)">LLM_MODEL</td><td>Rewrites a flagged page to fix judge / lint issues. Runs up to 2×.</td></tr>
+            <tr><td><span class="role">Answerer</span></td><td class="mono">generate_answer</td><td class="mono" style="color:var(--violet)">LLM_MODEL</td><td>RAG answer grounded in retrieved wiki. Prompt-versioned: weak / v1 / v2.</td></tr>
+            <tr><td><span class="role">Faithfulness judge</span></td><td class="mono">faithfulness_eval</td><td class="mono" style="color:var(--green)">LLM_JUDGE_MODEL</td><td>Online hallucination check: scores <code>faithfulness</code> + <code>answer_relevance</code>.</td></tr>
+            <tr><td><span class="role">Experiment evaluator</span> <small>offline</small></td><td class="mono">run_experiment</td><td class="mono">both</td><td>Re-answers a golden set with v1 vs v2, re-judged by the faithfulness judge.</td></tr>
+          </tbody>
+        </table>
+        </div>
+        <p class="lead-sm" style="margin-top:14px;">Deterministic (non-LLM) stages round out the tree: <span class="tag">fetch_source</span> <span class="tag">http_get</span> <span class="tag">extract_md</span> <span class="tag">retrieve_related / retrieve_context</span> <span class="tag">lint_links</span></p>
+      </div>
+    </section>
+
+    <!-- 3 · TRACE SHAPE -->
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">The shape of a trace</div>
+        <h2>One trace per turn — the full causal tree, no orphans</h2>
+        <p class="lead-sm" style="margin-bottom:16px;">Children auto-nest under the active observation via OTel context. Verified live: each flow lands as <b style="color:var(--body)">one root, fully nested</b> — including across the FastAPI async→sync boundary.</p>
+        <div class="grid2">
+          <div class="card">
+            <h3><span class="ic">📥</span> Ingest — one per source</h3>
+            <div class="tree" style="margin-top:10px;">
+              <div class="node"><span class="dot" style="background:#9E93E0"></span><span class="ty span">span</span><span class="nm">ingest_source</span></div>
+              <div class="indent">
+                <div class="node"><span class="dot" style="background:#9E93E0"></span><span class="ty span">span</span><span class="nm">fetch_source</span></div>
+                <div class="indent"><div class="node"><span class="dot" style="background:#7FB0EA"></span><span class="ty span">span</span><span class="nm">http_get</span><span class="note">· http.* url.*</span></div></div>
+                <div class="node"><span class="dot" style="background:#9E93E0"></span><span class="ty span">span</span><span class="nm">extract_md</span><span class="note">· wiki.extract.extractor</span></div>
+                <div class="node"><span class="dot" style="background:#9E93E0"></span><span class="ty span">span</span><span class="nm">retrieve_related</span><span class="note">· gen_ai.data_source.id</span></div>
+                <div class="node"><span class="dot" style="background:#F0966F"></span><span class="ty gen">gen</span><span class="nm">write_page</span><span class="note">Writer</span></div>
+                <div class="node"><span class="dot" style="background:#F0966F"></span><span class="ty gen">gen</span><span class="nm">judge_page</span><span class="note">Judge → scores</span></div>
+                <div class="node"><span class="dot" style="background:#9E93E0"></span><span class="ty span">span</span><span class="nm">lint_links</span><span class="note">→ lint_pass</span></div>
+                <div class="node" style="opacity:.7"><span class="dot" style="background:#F0966F"></span><span class="ty gen">loop</span><span class="nm">repair → judge → lint</span><span class="note">×≤2 if flagged</span></div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <h3><span class="ic">💬</span> Chat — one per turn <span class="tag g" style="margin-left:auto">grouped in a session</span></h3>
+            <div class="tree" style="margin-top:10px;">
+              <div class="node"><span class="dot" style="background:#9E93E0"></span><span class="ty span">span</span><span class="nm">chat_turn</span></div>
+              <div class="indent">
+                <div class="node"><span class="dot" style="background:#9E93E0"></span><span class="ty span">span</span><span class="nm">retrieve_context</span><span class="note">· gen_ai.data_source.id</span></div>
+                <div class="node"><span class="dot" style="background:#F0966F"></span><span class="ty gen">gen</span><span class="nm">generate_answer</span><span class="note">Answerer · prompt v1</span></div>
+                <div class="node"><span class="dot" style="background:#4FBF9C"></span><span class="ty gen">gen</span><span class="nm">faithfulness_eval</span><span class="note">Judge → 2 scores</span></div>
+              </div>
+            </div>
+            <div class="note v" style="margin-top:18px;">Turns share a <b>session_id</b> via <code>propagate_attributes()</code>, so a whole conversation is queryable — and replayable — as one unit.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4 · WHAT OTEL COLLECTS -->
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">What data is collected</div>
+        <h2>Every span carries far more than a name and a duration</h2>
+        <div class="grid3" style="margin-top:16px;">
+          <div class="card"><h3><span class="ic">🌳</span> Structure</h3><p><b style="color:var(--body)">Spans</b> for deterministic stages, <b style="color:var(--body)">generations</b> for LLM calls — nested into one tree with parent/child links and timing.</p></div>
+          <div class="card"><h3><span class="ic">🔢</span> Tokens &amp; model</h3><p>Per generation: <code>model</code>, input messages, output, and <code>usage_details</code> — <span class="mono">input / output / total</span> tokens. Cost is derived from these.</p></div>
+          <div class="card"><h3><span class="ic">🏷️</span> Attributes</h3><p><code>gen_ai.data_source.id</code> on RAG spans, <code>http.* url.*</code> on the HTTP child, and a private <code>wiki.*</code> namespace so nothing collides with future OTel keys.</p></div>
+          <div class="card"><h3><span class="ic">📊</span> Scores</h3><p><span class="mono">groundedness · faithfulness · answer_relevance · lint_pass · lint_issue_count</span> — attached to spans as the online-eval signal.</p></div>
+          <div class="card"><h3><span class="ic">🚦</span> Status</h3><p>Failures &amp; low scores set <code>level=WARNING/ERROR</code> with a <code>status_message</code> — the repair loop is visible as a low-score → WARNING → repair sequence.</p></div>
+          <div class="card"><h3><span class="ic">🔗</span> Context</h3><p><b style="color:var(--body)">Sessions</b> group multi-turn conversations; <b style="color:var(--body)">managed prompts</b> link each generation to a specific prompt version.</p></div>
+        </div>
+        <div class="note v" style="margin-top:16px;">Content capture is <b>ON</b> (prompts, tool args, retrieved text, raw results) — reasonable for a self-hosted POC and invaluable for debugging. In production this becomes a redaction policy decision (see the last slide).</div>
+      </div>
+    </section>
+
+    <!-- 5 · HOW IT'S SENT -->
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">How it gets to the backend</div>
+        <h2>Langfuse SDK v4 is OpenTelemetry underneath</h2>
+        <p class="lead-sm" style="margin-bottom:20px;">Each <code>obs.span()/generation()</code> opens an OTel span in the current context. Because context lives in <b style="color:var(--body)">contextvars</b>, children auto-nest and the trace survives the FastAPI threadpool hop — no manual propagation needed.</p>
+        <div class="flow">
+          <div class="step"><div class="n">01 · APP</div><h4>Instrument</h4><p>obs.py wraps each stage as an OTel span; llm.py wraps each call as a generation with tokens.</p></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="n">02 · SDK</div><h4>Batch</h4><p>Spans buffered in-process. <code>flush()</code> forces a send at the end of a turn / ingest.</p></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="n">03 · WIRE</div><h4>Export over HTTP</h4><p>Sent to <span class="mono">LANGFUSE_BASE_URL</span> (:3000), authed with the public / secret key pair.</p></div>
+          <div class="arrow">→</div>
+          <div class="step"><div class="n">04 · STORE</div><h4>Ingest &amp; persist</h4><p>web + worker fan out to Postgres, ClickHouse, Redis and S3/MinIO.</p></div>
+        </div>
+        <div class="grid2" style="margin-top:20px;">
+          <div class="card"><h3><span class="ic">🗄️</span> The backend stack (Docker)</h3><p><span class="mono" style="color:var(--body)">postgres</span> metadata · <span class="mono" style="color:var(--body)">clickhouse</span> traces/observations/scores · <span class="mono" style="color:var(--body)">redis</span> ingestion queue · <span class="mono" style="color:var(--body)">minio</span> large event payloads · <span class="mono" style="color:var(--body)">langfuse-web + worker</span>.</p></div>
+          <div class="card"><h3><span class="ic">📌</span> Version-pinned</h3><p><code>OTEL_SEMCONV_STABILITY_OPT_IN = gen_ai_latest_experimental</code> pins the GenAI convention generation so span-name drift is a config change, not a rewrite. Building against OTel semconv v1.41.</p></div>
+        </div>
+        <div class="note" style="margin-top:16px;">Today the app exports <b>directly</b> to Langfuse. No OpenTelemetry Collector sits in the middle yet — that's the hinge for redaction &amp; sampling and is deferred by design.</div>
+      </div>
+    </section>
+
+    <!-- 6 · WHAT LANGFUSE GIVES -->
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">What Langfuse gives you back</div>
+        <h2>From raw spans to a debuggable, measurable product</h2>
+        <div class="grid3" style="margin-top:16px;">
+          <div class="card"><h3><span class="ic">🌳</span> Traces</h3><p>The full nested tree per turn/source — click any span to see its exact input, output, and attributes.</p></div>
+          <div class="card"><h3><span class="ic">💰</span> Cost · tokens · latency</h3><p>Per generation and rolled up per trace. Cost comes from model price definitions (added for the custom gateway models).</p></div>
+          <div class="card"><h3><span class="ic">🎯</span> Scores over time</h3><p>faithfulness, groundedness, answer_relevance trended — catch a quality regression as it happens.</p></div>
+          <div class="card"><h3><span class="ic">🧵</span> Sessions</h3><p>Replay a whole multi-turn conversation grouped under one session_id.</p></div>
+          <div class="card"><h3><span class="ic">📝</span> Prompt management</h3><p>Versioned prompts (weak / v1 / v2) linked to the generations that used them — quality changes are attributable.</p></div>
+          <div class="card"><h3><span class="ic">🧪</span> Datasets &amp; experiments</h3><p>Flagged low-faithfulness traces → a golden set → a v1-vs-v2 prompt experiment on that set.</p></div>
+        </div>
+        <div class="note g" style="margin-top:18px;"><b>The improvement loop, closed:</b> production traces that hallucinate become the test set that proves the next prompt is better — all inside one tool.</div>
+      </div>
+    </section>
+
+    <!-- 7 · VERIFIED STATUS -->
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">Verified against the live backend</div>
+        <h2>What's proven working today</h2>
+        <div class="grid2" style="margin-top:16px;gap:14px;">
+          <div class="stat"><div class="v grn">1 root</div><div class="l">Ingest &amp; chat each land as a single nested trace — no orphans.</div></div>
+          <div class="stat"><div class="v grn">async→sync ✓</div><div class="l">Context survives the FastAPI threadpool boundary. No fix needed.</div></div>
+          <div class="stat"><div class="v vio">tokens ✓</div><div class="l">input / output / total populate on every generation.</div></div>
+          <div class="stat"><div class="v org">$0.0025</div><div class="l">Cost per sample turn, once model price definitions were added.</div></div>
+        </div>
+        <div class="card" style="margin-top:18px;">
+          <h3><span class="ic">🔍</span> The debugging story it enables</h3>
+          <ul class="list" style="margin-top:10px;">
+            <li><span class="b">›</span><span>A wrong answer is diagnosable end-to-end: retrieval spans log the <b>actual retrieved text</b>, LLM spans log their <b>arguments and raw output</b>.</span></li>
+            <li><span class="b">›</span><span>A low judge score raises a <b>WARNING</b>, fires the <b>repair loop</b>, and re-judges — the whole self-healing sequence is right there in the tree.</span></li>
+            <li><span class="b">›</span><span>Every quality change is attributable to a specific <b>prompt version</b> and a specific <b>model</b>.</span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 8 · FUTURE: MULTI-AGENT -->
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">Future work · the hard part</div>
+        <h2>Context propagation across <em style="font-style:normal;color:var(--violet-br)">different</em> agents</h2>
+        <p class="lead-sm" style="margin-bottom:16px;">This POC is a single fixed pipeline, so context propagation is the easy case. The moment you have <b style="color:var(--body)">multiple agents, tools, or handoffs</b>, keeping one execution as one trace becomes the dominant failure mode — one dropped <code>trace_id</code> fractures the tree into orphans and destroys the whole value proposition.</p>
+        <div class="grid2">
+          <div class="card"><h3><span class="ic">🤝</span> Agent → agent handoffs</h3><p>Nested agents should <b style="color:var(--body)">continue</b> the trace; peer handoffs should use <b style="color:var(--body)">span links + a shared session/conversation id</b> so a multi-agent exchange stays queryable as one unit.</p></div>
+          <div class="card"><h3><span class="ic">🛠️</span> Tool &amp; MCP spans</h3><p>An <code>execute_tool</code> span per tool call, with the downstream DB/HTTP work nesting <b style="color:var(--body)">inside</b> it — reconstructing "the LLM decided X → therefore Y ran." MCP transport is an easy place to drop context.</p></div>
+          <div class="card"><h3><span class="ic">🔀</span> Async / queue / webhook boundaries</h3><p>Every queue, thread, or callback must inject + extract context — the classic <code>@Async</code> context-loss problem. Decide whether a callback continues the trace or starts a linked one; never let it silently orphan.</p></div>
+          <div class="card"><h3><span class="ic">🧩</span> Standard gen_ai.* wire attributes</h3><p>Today model/tokens/cost land in Langfuse's native fields. Auto-instrumentation (OpenLLMetry) emitting standardized <code>gen_ai.*</code> keys would buy portability to a non-Langfuse backend.</p></div>
+        </div>
+        <div class="note v" style="margin-top:16px;">Rule of thumb from the checklist: <b>fix propagation before adding any more spans.</b> Verify each boundary with one representative run → it must show as a single trace.</div>
+      </div>
+    </section>
+
+    <!-- 9 · FUTURE: PRODUCTION -->
+    <section class="slide">
+      <div class="slide-inner">
+        <div class="kicker">Future work · production hardening</div>
+        <h2>The classical distributed-tracing layer, deferred by design</h2>
+        <p class="lead-sm" style="margin-bottom:16px;">~80% of LLM observability is tracing you already know. These are POC-optional but must precede any production rollout.</p>
+        <div class="grid3">
+          <div class="card"><h3><span class="ic">🚏</span> OTel Collector</h3><p>Route app → collector → backend instead of exporting direct. The hinge where redaction, batching &amp; routing live.</p></div>
+          <div class="card"><h3><span class="ic">🕵️</span> PII redaction</h3><p>Redact at the collector (redaction processor / Presidio sidecar) <b style="color:var(--body)">before</b> export — centralized and auditable, not in app code.</p></div>
+          <div class="card"><h3><span class="ic">🎚️</span> Tail sampling</h3><p>Keep 100% of error &amp; slow traces, sample a fraction of the successful ones.</p></div>
+          <div class="card"><h3><span class="ic">🗃️</span> Retention &amp; storage tiers</h3><p>Shorter retention for content-bearing spans; large payloads to object storage behind IAM, keep only an <code>app.payload.ref</code>.</p></div>
+          <div class="card"><h3><span class="ic">📈</span> Dashboards</h3><p>The three that pay for themselves: tokens per agent, tokens per model, cost over time.</p></div>
+          <div class="card"><h3><span class="ic">🔗</span> Correlation</h3><p>Tie traces to the existing metrics/logs stack (Grafana / ELK) via shared trace IDs.</p></div>
+        </div>
+        <div class="note" style="margin-top:16px;">Priority order when time is short: <b>1)</b> context propagation → <b>2)</b> minimal manual spans → <b>3)</b> content/redaction policy → <b>4)</b> version pinning &amp; namespacing → <b>5)</b> collector, sampling, dashboards.</div>
+      </div>
+    </section>
+
+    <!-- 10 · CLOSE -->
+    <section class="slide">
+      <div class="slide-inner titlewrap">
+        <div class="kicker">In one breath</div>
+        <h1>The observability layer is the product<br>as much as the wiki is.</h1>
+        <p class="lead" style="margin-top:4px;">Two files own all instrumentation. Every stage is a span, every LLM call a traced generation, every answer scored, and every flagged trace a future test case. Swap the model, the provider, or the corpus — the telemetry doesn't change.</p>
+        <div class="grid3" style="margin-top:26px;">
+          <div class="card"><h3 style="margin:0;"><span class="ic">✅</span> Done &amp; verified</h3><p style="margin-top:6px;">Single-trace-per-turn · async→sync propagation · RAG / http / wiki attributes · tokens &amp; cost.</p></div>
+          <div class="card"><h3 style="margin:0;"><span class="ic">🔜</span> Next, if it grows</h3><p style="margin-top:6px;">Multi-agent handoffs · tool / MCP spans · collector-side redaction &amp; sampling.</p></div>
+          <div class="card"><h3 style="margin:0;"><span class="ic">🧭</span> The one rule</h3><p style="margin-top:6px;">Fix context propagation first. One run = one trace, or nothing downstream is trustworthy.</p></div>
+        </div>
+        <p class="lead-sm" style="margin-top:24px;">Explore it live: the chat UI at <code>localhost:8000</code> · traces at <code>localhost:3000</code>.</p>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- bottom nav -->
+  <div class="nav">
+    <button class="btn" id="prev">← Prev</button>
+    <div class="dots" id="dots"></div>
+    <div class="progress"><div class="fill" id="fill"></div></div>
+    <span class="hint">← → / space</span>
+    <button class="btn" id="next">Next →</button>
+  </div>
+</div>
+
+<script>
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const dotsEl = document.getElementById('dots');
+  const fill = document.getElementById('fill');
+  const curEl = document.getElementById('cur');
+  const totEl = document.getElementById('tot');
+  let i = 0;
+  totEl.textContent = String(slides.length).padStart(2,'0');
+
+  slides.forEach((_, k) => {
+    const d = document.createElement('i');
+    d.onclick = () => go(k);
+    dotsEl.appendChild(d);
+  });
+  const dots = Array.from(dotsEl.children);
+
+  function go(n){
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach((s, k) => s.classList.toggle('active', k === i));
+    dots.forEach((d, k) => d.classList.toggle('on', k === i));
+    fill.style.width = ((i + 1) / slides.length * 100) + '%';
+    curEl.textContent = String(i + 1).padStart(2,'0');
+    document.getElementById('prev').disabled = i === 0;
+    document.getElementById('next').disabled = i === slides.length - 1;
+    const active = slides[i]; if (active) active.scrollTop = 0;
+  }
+  document.getElementById('prev').onclick = () => go(i - 1);
+  document.getElementById('next').onclick = () => go(i + 1);
+  window.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown'){ e.preventDefault(); go(i + 1); }
+    if (e.key === 'ArrowLeft' || e.key === 'PageUp'){ e.preventDefault(); go(i - 1); }
+    if (e.key === 'Home'){ go(0); } if (e.key === 'End'){ go(slides.length - 1); }
+  });
+  go(0);
+</script>
+</body>
+</html>
