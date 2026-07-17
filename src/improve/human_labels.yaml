@@ -1,0 +1,2195 @@
+# Judge-trust labeling worksheet (built by: python -m src.improve.judge_check --build-worksheet)
+#
+# For each case: read the answer, open the cited wiki/<slug>.md pages, and set
+#   human_label: faithful     — every claim in the answer is supported by the cited pages
+#   human_label: unfaithful   — the answer asserts something the pages don't support
+# Leave human_label empty to skip a case. `judge_faithfulness` is what the LLM
+# judge said — do NOT let it anchor you; label from the sources.
+cases:
+- trace_id: 0065e716916665d6b6f5272c27ec477f
+  question: That's way too vague, it barely answers anything. Can you explain in much more detail?
+  answer: 'Observability is a discipline that goes well beyond traditional monitoring, and understanding
+    why requires unpacking several distinct ideas from the context. Here is a detailed walkthrough.
+
+
+    ---
+
+
+    ## 1. Monitoring vs. Observability: The Core Distinction
+
+
+    According to Charity Majors (as captured in the *Building Observability Tools* page), the two solve
+    fundamentally different problems:
+
+
+    - **Monitoring** is built to handle *known-unknowns*. Engineers know in advance what kinds of failures
+    can happen, so they set up predefined thresholds, alerts, and runbooks. If CPU usage exceeds 90%,
+    an alert fires. If a service returns 500 errors, a runbook kicks in. This works because the questions
+    are predictable.
+
+    - **Observability** is built to handle *unknown-unknowns*. These are questions engineers didn''t know
+    they would need to ask. A new failure mode appears in production, and the team must reconstruct the
+    system state without having shipped code to handle that specific state. If you had shipped code to
+    handle it, by definition it was a known-unknown — and monitoring would have been sufficient.
+
+
+    This distinction matters because it changes what kind of data you need to collect. Monitoring can
+    rely on aggregated counters and pre-aggregated metrics. Observability demands enough raw detail that
+    you can ask *new* questions of *old* data.
+
+
+    ---
+
+
+    ## 2. Majors'' Event-Based Specification
+
+
+    Majors argues that any tool claiming to deliver observability must meet a specific set of requirements.
+    Each one exists because it enables a specific kind of investigation:
+
+
+    - **Arbitrarily-wide structured raw events**: A single event can carry as many key-value pairs as
+    needed. This is what lets you ask questions you didn''t pre-define — you don''t have to decide in
+    advance which fields matter.
+
+    - **Context persisted through the execution path**: A request flows across many services. The context
+    (trace ID, user ID, session ID, feature flags, etc.) must travel with it so that when you find a problem,
+    you can reconstruct the full journey.
+
+    - **No indexes or schemas**: Indexes and schemas force you to know your query patterns in advance.
+    Observability demands that you can explore freely, so the storage layer should accept arbitrary structure.
+
+    - **High-cardinality, high-dimensionality**: You must be able to filter on rare values (a specific
+    user ID, a specific build version, a specific request ID). Traditional metrics systems collapse these
+    dimensions at write time, which destroys the ability to investigate outliers.
+
+    - **Ordered dimensions for traceability**: When you slice across dimensions, the order matters — you
+    need to be able to follow a causal chain through the system, not just count events in buckets.
+
+    - **Client-side dynamic sampling**: Because the volume of events is enormous, the decision about which
+    events to keep in full detail must be made intelligently. Dynamic sampling lets the client decide
+    based on what it''s currently seeing, rather than blindly recording everything or sampling uniformly.
+
+    - **An exploratory visual interface**: Engineers need to slice, dice, and combine dimensions interactively.
+    A static dashboard is not enough — the UI must support the kind of ad-hoc exploration that unknown-unknowns
+    require.
+
+    - **Close to real-time**: When something is broken, you can''t wait hours for batch processing. The
+    data needs to be queryable almost as soon as it''s generated.
+
+
+    Majors explicitly rejects the "three pillars" framing (metrics, logs, traces) as a model of observability,
+    calling it "bullshit." Her argument is that metrics lose the connective tissue between data points
+    (you can''t see what happened between the data points), and schemas constrain the questions that can
+    be asked. Instead, she argues the single primitive should be the wide, structured event scoped to
+    a request — and metrics, logs, and traces are all derived views onto that primitive rather than separate
+    pillars.
+
+
+    ---
+
+
+    ## 3. Why LLM Observability is Different
+
+
+    The *LLM Observability* page makes clear that traditional APM tools are not sufficient for LLM systems,
+    for several reasons:
+
+
+    - **Non-determinism**: The same input to an LLM can produce different outputs on different runs. Traditional
+    monitoring assumes predictable systems; LLM systems are probabilistic. The shift is from tracking
+    uptime to measuring output reliability and drift over time.
+
+    - **Qualitative failure modes**: Hallucinations, prompt-injection attacks, and inconsistent user experiences
+    are not the kind of failure that shows up in a CPU graph or an error rate. They are semantic problems,
+    and detecting them requires evaluating the *content* of outputs, not just their metadata.
+
+    - **Cost unpredictability**: LLM costs scale with token usage, which can spike unpredictably depending
+    on prompt length, model selection, or retry behavior. Cost becomes a first-class observability concern,
+    not a billing afterthought.
+
+    - **Observability vs. Evaluation**: These are distinct but interconnected. Evaluation happens *before*
+    deployment (does this model behave correctly on my test set?). Observability happens *after* deployment
+    (how is it behaving in the real world, on real user data, right now?). Both are needed — evaluation
+    without observability leaves you blind in production, and observability without evaluation means you
+    have no baseline to compare against.
+
+
+    The LLM Observability Playbook (referenced in the page) is described as a practical checklist of what
+    to actually track, and the tool landscape section describes the emerging ecosystem of solutions, from
+    comprehensive AI development platforms to specialized tracing libraries and general APM tools that
+    are adding LLM features.
+
+
+    ---
+
+
+    ## 4. Hallucination Detection in Practice
+
+
+    The *LLM Hallucination Detection* page goes deep on one specific failure mode. A hallucination is
+    when an LLM confidently produces false or unsupported information. This is dangerous because it can
+    spread misinformation, damage reputation, and erode user trust.
+
+
+    A common misconception is that retrieval-augmented generation (RAG) eliminates hallucinations. It
+    does not. RAG reduces them by grounding the LLM in retrieved sources, and by prompting the model to
+    cite those sources — but LLMs can still fabricate responses *while citing sources*, giving users a
+    false sense of confidence. The citations look legitimate, the language sounds authoritative, and the
+    underlying claim is invented.
+
+
+    Datadog''s hallucination detection is described as an out-of-the-box evaluation in Datadog LLM Observability.
+    It works by comparing the LLM''s output against the context provided from retrieved sources, and it
+    answers questions like:
+
+
+    - Did the LLM interpret the retrieved sources correctly?
+
+    - Did the LLM omit key facts from the sources in a way that changed the meaning of the response?
+
+    - Did the LLM fabricate a plausible-sounding citation that the source does not actually support?
+
+
+    In other words, hallucination detection is not a single check — it is a set of evaluations that together
+    assess whether the output is faithfully grounded in the provided context. For teams running RAG applications
+    in production, this is an ongoing concern, not a one-time fix.
+
+
+    ---
+
+
+    ## 5. How These Pieces Fit Together
+
+
+    The three pages together describe a coherent picture:
+
+
+    - **The building-observability-tools page** gives you the *theoretical specification* — what any observability
+    tool must be capable of.
+
+    - **The llm-observability page** applies that thinking to a *new domain* where conventional monitoring
+    fails, and explains what a specialized approach looks like.
+
+    - **The llm-hallucination-detection page** zooms into a *specific evaluation* that operationalizes
+    one of the key concerns raised in the LLM observability discussion.
+
+
+    The throughline is that in both classical distributed systems and LLM applications, the hardest problems
+    are the ones you didn''t predict. Observability — in the Majors sense — is the discipline of building
+    systems that can answer those questions anyway.'
+  cited_slugs:
+  - building-observability-tools
+  - llm-observability
+  - llm-hallucination-detection
+  judge_faithfulness: 0.8
+  human_label: null
+  notes: ''
+- trace_id: 799939770dca213e8a86efb9a63acdb9
+  question: are you serious?
+  answer: I understand the question is a bit out of left field! I'm absolutely serious — I'm here to help
+    you with observability questions (metrics, logs, traces, monitoring, alerting, and related tooling).
+    The reason I don't have a substantive answer for you is simply that no relevant wiki pages were found
+    in the context for this turn, so I have no source material to draw on. If you have a specific observability
+    question, feel free to ask and I'll do my best to answer it.
+  cited_slugs: []
+  judge_faithfulness: 0.1
+  human_label: null
+  notes: ''
+- trace_id: 02ed87b82cbafe52b1fbbbd16be3f5ab
+  question: How do you detect hallucinations in an LLM application?
+  answer: 'Detecting hallucinations in an LLM application requires a dedicated evaluation approach, since
+    traditional retrieval techniques like RAG (Retrieval-Augmented Generation) alone are not sufficient.
+    While RAG helps reduce hallucinations by providing LLMs with verified context and prompting them to
+    cite sources, LLMs can still fabricate information—even while appearing to cite real sources, giving
+    users a false sense of confidence.
+
+
+    To effectively detect hallucinations, a system needs to answer several key questions about each LLM
+    response:
+
+
+    1. **Did the LLM interpret the retrieved sources correctly?** — Ensuring the model understood the
+    context it was given.
+
+    2. **Did the LLM omit key facts from the sources in a way that changed the meaning of the response?**
+    — Even partially accurate responses can distort meaning through omission.
+
+    3. **Did the LLM''s output reflect what the source actually said, or did it fabricate a plausible-sounding
+    citation?** — Catching cases where the model invents or misrepresents source material.
+
+
+    Datadog addresses this through an **out-of-the-box hallucination detection evaluation** available
+    in Datadog LLM Observability. This feature automatically detects when an LLM''s output disagrees with
+    the context provided from retrieved sources, enabling teams to proactively identify, analyze, and
+    reduce hallucinations. This is especially valuable for RAG applications, where it helps ensure more
+    reliable responses by comparing the generated output against the actual retrieved context.
+
+
+    Additionally, monitoring hallucinations is considered a top failure mode in LLM observability more
+    broadly, and teams are encouraged to set alerts for hallucination rates as part of their overall LLM
+    observability strategy, alongside monitoring for latency changes and cost anomalies.'
+  cited_slugs:
+  - llm-hallucination-detection
+  - llm-observability
+  judge_faithfulness: 0.6
+  human_label: null
+  notes: ''
+- trace_id: dc21ae82be442545c89d664363578f4a
+  question: That's wrong — the wiki actually says head-based is the sensible default. You contradicted
+    the source.
+  answer: 'I want to be accurate about what the source actually says. The opentelemetry-sampling page
+    describes head-based sampling and tail-based sampling, but it does not label head-based as the sensible
+    default — it introduces both techniques neutrally: ''There are different sampling techniques, including
+    head-based sampling, where the decision to sample is made at the start of a request, and tail-based
+    sampling, where traces are evaluated after they complete to determine their relevance.'' If I characterized
+    one as the default in a prior answer, that wasn''t supported by the passage I was given. That said,
+    the excerpt provided to me may be incomplete, and the full page could contain guidance on defaults
+    that wasn''t included in the context. If you can share the specific section you believe establishes
+    head-based as the default, I can re-evaluate against it. I''d rather correct an honest mistake than
+    agree with a mischaracterization of the source.'
+  cited_slugs:
+  - opentelemetry-sampling
+  judge_faithfulness: 1.0
+  human_label: null
+  notes: ''
+- trace_id: 1f9b2bbfc889959c13f3c5c42be368be
+  question: Is tail-based sampling always better than head-based sampling?
+  answer: 'No, tail-based sampling is not always better than head-based sampling. Based on the provided
+    context, each approach serves different purposes:
+
+
+    - **Head-based sampling** makes the decision to sample at the start of a request. It is simpler, has
+    lower overhead, and avoids the need to buffer or store all spans before deciding what to keep.
+
+    - **Tail-based sampling** evaluates traces after they complete to determine their relevance. This
+    allows more informed decisions (e.g., keeping only traces with errors or performance anomalies) but
+    requires buffering all spans and more resources.
+
+
+    The context does not claim that one is universally superior. In practice, the choice depends on trade-offs:
+    head-based sampling is more resource-efficient and easier to implement at scale, while tail-based
+    sampling is better for capturing edge cases like errors and performance anomalies but is more expensive
+    to operate. The best sampling strategy often combines both techniques based on the specific observability
+    needs of the system.'
+  cited_slugs:
+  - opentelemetry-sampling
+  judge_faithfulness: 1.0
+  human_label: null
+  notes: ''
+- trace_id: ad53c8d3f6bea24477d8d6aede269c01
+  question: How do you detect hallucinations in an LLM app?
+  answer: '## How to Detect Hallucinations in an LLM App
+
+
+    A hallucination occurs when a large language model (LLM) confidently generates information that is
+    false or unsupported. Detecting these is important because they can spread misinformation, cause reputational
+    damage, and erode user trust.
+
+
+    ### Why RAG Alone Isn''t Enough
+
+
+    Retrieval-augmented generation (RAG) reduces hallucinations by providing LLMs with relevant context
+    from verified sources and prompting them to cite those sources. However, RAG does not *prevent* hallucinations
+    — LLMs can still fabricate responses while citing sources, giving users a false sense of confidence.
+    So hallucination detection must be handled as a separate, ongoing concern.
+
+
+    ### How Hallucination Detection Works
+
+
+    To detect hallucinations, you need the ability to answer a set of questions about each LLM response,
+    such as:
+
+
+    1. **Did the LLM interpret the retrieved sources correctly?**
+
+    2. **Did the LLM omit key facts from the sources (i.e., the context) in a way that changed the meaning
+    of the response?**
+
+    3. **Did the LLM''s output reflect what the source actually said, or did the LLM fabricate a plausible-sounding
+    citation?**
+
+
+    By systematically checking the model''s output against the retrieved source material, you can flag
+    responses where the output disagrees with the verified context.
+
+
+    ### Datadog''s Approach
+
+
+    Datadog provides hallucination detection as an **out-of-the-box evaluation** within Datadog LLM Observability.
+    It automatically detects when an LLM''s output disagrees with the context provided from retrieved
+    sources, enabling teams to proactively identify, analyze, and reduce hallucinations and produce more
+    reliable RAG-powered responses.
+
+
+    ### General Best Practices
+
+
+    Because hallucinations are a qualitative problem that is often invisible in normal logs, broader LLM
+    observability guidance suggests you should:
+
+    - Treat output reliability and drift as first-class signals (rather than just uptime), since LLMs
+    are non-deterministic.
+
+    - Set alerts for **hallucination rates**, **latency changes**, and **cost anomalies** as part of your
+    monitoring strategy.
+
+    - Combine pre-deployment **evaluation** with post-deployment **observability** to catch issues across
+    the lifecycle.
+
+
+    In short: instrument your LLM app to compare its outputs against the retrieved/contextual ground truth,
+    score each response for faithfulness to the sources, track those scores over time, and alert on regressions.'
+  cited_slugs:
+  - llm-hallucination-detection
+  - llm-observability
+  judge_faithfulness: 0.7
+  human_label: null
+  notes: ''
+- trace_id: 73b3a61363d7dc86deacccbaf6820271
+  question: This is absolute garbage, you clearly have no idea what the hell you're talking about.
+  answer: 'I haven''t actually given a response yet on your observability question — only the source material
+    has been loaded. I''d like to help, but I need to know what you''re actually trying to ask. Based
+    on the context provided, I can assist with topics such as:
+
+
+    - The event-based specification for observability tooling (wide structured events, high cardinality,
+    no schemas, exploratory interfaces, client-side sampling, and Charity Majors'' critique of the metrics/logs/traces
+    framing).
+
+    - Why traditional monitoring falls short for LLM systems, including non-determinism, hallucinations,
+    cost spikes, and prompt-injection risks, and how observability differs from pre-deployment evaluation.
+
+    - Trace sampling in OpenTelemetry, including why sampling is necessary at scale, head-based vs. tail-based
+    approaches, and the trade-off between statistical representativeness and capturing rare errors.
+
+
+    If something in a prior response was wrong or unclear, tell me which claim and I''ll re-examine it
+    against the source material. If you''re frustrated with the observability space generally — for example,
+    vendor marketing, the three-pillars framing, or the gap between APM tools and LLM realities — I can
+    engage with that directly as well.'
+  cited_slugs:
+  - building-observability-tools
+  - llm-observability
+  - opentelemetry-sampling
+  judge_faithfulness: 0.9
+  human_label: null
+  notes: ''
+- trace_id: b19a29abeb5185f22c3a2762a7fb86a4
+  question: How do the three pillars of observability relate to each other?
+  answer: 'The three pillars of observability — **metrics, logs, and traces** — are distinct but complementary
+    telemetry types that work together to give operators full visibility into distributed systems. According
+    to the context, they relate to each other in the following ways:
+
+
+    1. **Each pillar is distinct and essential, but incomplete on its own.** No single pillar provides
+    full observability. Metrics give aggregated numerical insight, logs provide discrete event records,
+    and traces show request flow across services. You typically need all three to understand a system''s
+    internal state from its external outputs.
+
+
+    2. **Their real power lies in collaboration.** The pillars framing is borrowed from other domains
+    (like corporate responsibility''s environmental/social/financial sustainability, digital transformation''s
+    people/process/technology, and Scrum''s transparency/inspection/adaptation) where the components are
+    individually necessary but only fully meaningful when combined. Similarly, metrics, logs, and traces
+    complement each other — for example, a metric may reveal a latency spike, logs can show the corresponding
+    error messages, and traces can connect the slow request across all the services it touched.
+
+
+    3. **They share a common foundation: events.** The three pillars are all derived from the same underlying
+    system events. When something happens on a network — such as a client requesting resources from a
+    server, the server checking API key authentication, and processing the request — each of those moments
+    is an event. Observability platforms rely on these events to initiate the tracking, analysis, and
+    correlation processes that produce logs, metrics, and traces. This shared event-driven origin is what
+    allows the three pillars to be correlated and combined into a coherent picture of system behavior.
+
+
+    In short, the three pillars relate as a set of interdependent views: each captures a different facet
+    of the same underlying event stream, and observability emerges from their combination rather than
+    from any one pillar in isolation.'
+  cited_slugs:
+  - three-pillars-of-observability
+  judge_faithfulness: 0.85
+  human_label: null
+  notes: ''
+- trace_id: a3f373cbe1c30f3d8cd2e6605740204e
+  question: Great. Now can you give me a recipe for chocolate chip cookies?
+  answer: 'The provided context covers LLM observability, event-based observability tooling, and the three
+    pillars of observability — none of which contain a cookie recipe. Since you asked anyway, here''s
+    a straightforward, reliable recipe for classic chocolate chip cookies:
+
+
+    ## Classic Chocolate Chip Cookies
+
+
+    **Ingredients (makes ~24 cookies)**
+
+    - 1 cup (226 g) unsalted butter, softened
+
+    - 3/4 cup (150 g) granulated sugar
+
+    - 3/4 cup (165 g) packed brown sugar
+
+    - 2 large eggs
+
+    - 1 tsp vanilla extract
+
+    - 2 1/4 cups (280 g) all-purpose flour
+
+    - 1 tsp baking soda
+
+    - 1 tsp salt
+
+    - 2 cups (340 g) semisweet chocolate chips
+
+
+    **Instructions**
+
+    1. Preheat oven to 375°F (190°C). Line baking sheets with parchment paper.
+
+    2. In a large bowl, cream together the butter, granulated sugar, and brown sugar until light and fluffy
+    (~2–3 minutes).
+
+    3. Beat in the eggs one at a time, then stir in the vanilla.
+
+    4. In a separate bowl, whisk together the flour, baking soda, and salt.
+
+    5. Gradually mix the dry ingredients into the wet ingredients until just combined.
+
+    6. Fold in the chocolate chips.
+
+    7. Drop rounded tablespoons of dough onto the prepared baking sheets, spacing them about 2 inches
+    apart.
+
+    8. Bake for 9–11 minutes, until the edges are golden but the centers still look slightly soft.
+
+    9. Let cool on the baking sheet for 5 minutes, then transfer to a wire rack to finish cooling.
+
+
+    **Tips**
+
+    - For chewier cookies, slightly underbake and let them set on the pan.
+
+    - For crispier cookies, flatten the dough balls slightly and bake a minute longer.
+
+    - Chilling the dough for 30+ minutes deepens the flavor.
+
+
+    Note: none of the wiki pages in the provided context (which were about observability) were relevant
+    to this question, so the recipe above is from general knowledge rather than the cited material.'
+  cited_slugs:
+  - llm-observability
+  - building-observability-tools
+  - three-pillars-of-observability
+  judge_faithfulness: 0.0
+  human_label: null
+  notes: ''
+- trace_id: a8c7e7ce4dd56163806ddd1a4847f6a9
+  question: What is distributed tracing in observability?
+  answer: 'Based on the provided context, the wiki pages do not contain a detailed or explicit definition
+    of distributed tracing. However, the context offers some relevant information:
+
+
+    - The [three-pillars-of-observability] page identifies traces as one of the three pillars of observability,
+    alongside metrics and logs. The page explains that observability is driven by system events, and that
+    observability platforms use these events to "initiate the tracking, analysis, and correlation processes"
+    that help teams understand complex, distributed computing environments. While traces are listed as
+    a core pillar, the provided excerpt is cut off before offering a dedicated definition of distributed
+    tracing.
+
+
+    - The [building-observability-tools] page takes a different stance, rejecting the three pillars framing
+    in favor of a single primitive: the wide, structured event scoped to a request. In this view, traces
+    are not a separate primitive but rather a specific shape that emerges from events that share a request-scoped
+    context, with ordered dimensions for traceability through the execution path.
+
+
+    - The [llm-observability] page does not specifically discuss distributed tracing.
+
+
+    In short, the context does not contain a thorough definition of distributed tracing, so a more complete
+    answer would require additional source material.'
+  cited_slugs:
+  - three-pillars-of-observability
+  - building-observability-tools
+  - llm-observability
+  judge_faithfulness: 1.0
+  human_label: null
+  notes: ''
+- trace_id: 03a16c585d6735ee6e9b438ebacf2194
+  question: How does LLM observability differ from traditional observability?
+  answer: 'LLM observability differs from traditional observability in several fundamental ways because
+    the systems being observed are fundamentally different in nature.
+
+
+    **1. Non-determinism vs. determinism.** Traditional observability, as Charity Majors argues, is built
+    to handle unknown-unknowns in systems that are otherwise predictable — a given input yields a given
+    output, and anomalies come from infrastructure, not logic. LLMs invert this: the same prompt can produce
+    different responses on every call. You cannot reason about an LLM the way you reason about a web service.
+    As a result, the central question shifts from "is the system up?" to "is the output reliable?" — tracking
+    uptime becomes secondary to measuring output quality and drift.
+
+
+    **2. Qualitative vs. quantitative failures.** Traditional monitoring excels at catching things like
+    latency spikes, error rate thresholds, and saturation — known-unknowns expressible as metrics. LLM
+    failure modes are qualitative: hallucinations, subtle bias, fabricated citations, tone drift, and
+    prompt-injection compromises. These are largely invisible to logs and metrics because the response
+    may look syntactically perfect while being semantically wrong or unsafe. You need new primitives —
+    such as out-of-the-box evaluators that compare an LLM''s output against retrieved context to flag
+    disagreement — because conventional structured logs have no field for "the answer sounds right but
+    isn''t."
+
+
+    **3. Observability vs. evaluation as a first-class concern.** In traditional systems, pre-deployment
+    testing (unit/integration tests) and post-deployment monitoring are separate disciplines. With LLMs,
+    evaluation must be continuous and integrated into both phases. You need to score outputs against ground
+    truth or retrieved context in production, not just in staging, because model behavior, prompt effectiveness,
+    and retrieval quality all drift over time. The two practices (observability and evaluation) become
+    tightly coupled.
+
+
+    **4. New cost and security dimensions.** Traditional observability tracks compute, memory, and request
+    costs. LLM observability must also track token consumption, which is highly variable per request and
+    can spike with prompt chaining or agentic loops. Security observability expands to include prompt-injection
+    attempts, jailbreaks, and sensitive-data leakage — attack surfaces that don''t exist in conventional
+    services.
+
+
+    **5. Complex, multi-step AI workflows.** A typical LLM application is not a single request/response.
+    It''s a pipeline: retrieval, reranking, prompting, tool calls, sometimes multi-agent orchestration,
+    and finally generation. Traditional request-scoped tracing handles this awkwardly because the "request"
+    is now a graph of LLM calls, each with its own model, prompt, and context. Tracing needs to capture
+    prompt templates, retrieved documents, tool invocations, and intermediate reasoning — dimensions traditional
+    APM schemas weren''t designed for.
+
+
+    **6. Human and contextual feedback loops.** Traditional observability largely relies on system-generated
+    signals. LLM observability places much more weight on human feedback (thumbs up/down, corrections,
+    expert review) and on context-dependent signals (was the retrieved source actually relevant? did the
+    model respect system instructions?). This means the "wide event" model that Majors champions — high-cardinality,
+    schema-less, exploratory — is arguably even more important for LLMs, because the questions you''ll
+    need to ask of your traces tomorrow are not the ones you''re asking today.
+
+
+    In short, LLM observability borrows the philosophy of modern observability (rich events, high cardinality,
+    exploratory analysis) but extends it into territory where the unit of failure is meaning itself, not
+    availability.'
+  cited_slugs:
+  - llm-observability
+  - llm-hallucination-detection
+  - building-observability-tools
+  judge_faithfulness: 0.8
+  human_label: null
+  notes: ''
+- trace_id: 5a66ba49aab65ba70cbbd634638e023f
+  question: How does LLM observability differ from traditional observability?
+  answer: 'Based on the available context, LLM observability differs from traditional observability in
+    several key ways:
+
+
+    1. **Non-deterministic nature**: LLMs are non-deterministic, meaning the same input can produce different
+    outputs. Traditional APM (Application Performance Monitoring) tools assume predictable systems rather
+    than probabilistic behavior. This requires a shift from tracking uptime to measuring output reliability
+    and drift.
+
+
+    2. **Unique failure modes**: LLMs introduce qualitative failure modes that traditional observability
+    tools are not designed to catch. These include hallucinations (confidently generated false or unsupported
+    information), cost spikes, prompt-injection attacks, and inconsistent user experiences. These problems
+    are often invisible to normal logs.
+
+
+    3. **Different alerting needs**: Instead of traditional uptime or error-rate alerts, LLM observability
+    requires alerts for hallucination rates, latency changes, and cost anomalies.
+
+
+    The context does not provide a more detailed head-to-head comparison of LLM observability versus traditional
+    observability beyond these points. The page on building observability tools discusses general observability
+    philosophy (rejection of the ''three pillars'' framing in favor of wide structured events) but does
+    not specifically address how this applies differently to LLMs.'
+  cited_slugs:
+  - llm-observability
+  judge_faithfulness: 0.9
+  human_label: null
+  notes: ''
+- trace_id: cf9fd8bdfc0389d746b029c3d49eb575
+  question: How does LLM observability differ from traditional observability?
+  answer: "LLM observability differs from traditional observability in several fundamental ways:\n\n1.\
+    \ **Non-deterministic vs. deterministic systems**: Traditional APM (Application Performance Monitoring)\
+    \ tools assume predictable, deterministic systems. LLMs, however, are non-deterministic—the same input\
+    \ can produce different outputs. This means traditional monitoring approaches that rely on predictable\
+    \ behavior fall short.\n\n2. **Different primary metrics**: Traditional observability focuses on tracking\
+    \ uptime and system health. LLM observability requires shifting focus to measuring output reliability,\
+    \ drift, and qualitative aspects of model behavior rather than just whether the system is up.\n\n\
+    3. **New failure modes**: LLMs introduce unique failure modes that traditional monitoring tools aren't\
+    \ designed to catch, including:\n   - **Hallucinations**: When the LLM confidently generates false\
+    \ or unsupported information\n   - **Cost spikes**: Unpredictable costs from variable token usage\n\
+    \   - **Prompt-injection attacks**: Security vulnerabilities unique to LLM applications\n   - **Inconsistent\
+    \ user experiences**: Due to the probabilistic nature of outputs\n\n4. **Qualitative problems**: Many\
+    \ LLM issues are qualitative and often invisible to normal logs. For example, even with RAG (retrieval-augmented\
+    \ generation) techniques that provide verified sources, LLMs can still fabricate responses while citing\
+    \ sources—giving false confidence.\n\n5. **Different alerting needs**: Rather than traditional uptime\
+    \ alerts, LLM observability requires alerts for hallucination rates, latency changes, and cost anomalies.\n\
+    \n6. **Beyond the three pillars**: As noted in observability theory, traditional observability tools\
+    \ built around the 'three pillars' (metrics, logs, and traces) may be structurally insufficient. Modern\
+    \ observability emphasizes wide, structured events scoped to requests, with high cardinality and dimensionality—approaches\
+    \ better suited to capturing the complex, probabilistic behavior of LLM systems.\n\nIn essence, LLM\
+    \ observability requires a fundamentally different approach because it deals with probabilistic, qualitative\
+    \ systems where the 'correct' output is often subjective, rather than deterministic systems where\
+    \ behavior can be precisely predicted and measured against fixed thresholds."
+  cited_slugs:
+  - llm-observability
+  - llm-hallucination-detection
+  - building-observability-tools
+  judge_faithfulness: 0.8
+  human_label: null
+  notes: ''
+- trace_id: 40a3f789ae1e0e6c0064a439523f561c
+  question: what is tail based?
+  answer: '**Tail-based sampling** is a trace sampling strategy in distributed tracing where the decision
+    to keep or discard a trace is made **after the trace has fully completed** (i.e., at the "tail" end
+    of the trace), rather than at the beginning. This is in contrast to **head-based sampling**, where
+    the sampling decision is made at the start (the "head") of a request, typically by the first service
+    that receives it.
+
+
+    ## How It Works
+
+
+    In tail-based sampling, every span for a request is initially collected and forwarded to a centralized
+    sampling decision point (often a collector or gateway). Once the full trace is assembled and evaluated,
+    the decision is made about whether to persist it based on criteria evaluated against the complete
+    trace data.
+
+
+    ## Common Tail-Based Sampling Rules
+
+
+    - **Error-based**: Always keep traces that contain errors or exceptions
+
+    - **Latency-based**: Retain traces whose total duration exceeds a threshold (e.g., p99 outliers)
+
+    - **Status-based**: Keep traces with specific HTTP status codes (e.g., 5xx)
+
+    - **Attribute-based**: Retain traces matching certain tags, user IDs, or feature flags
+
+    - **Rate-limiting**: After applying the above rules, apply a probabilistic sampler to remaining traces
+    to control volume
+
+
+    ## Advantages
+
+
+    1. **Captures rare but important events** — since the full trace is available, you can identify and
+    retain traces involving errors, slow operations, or unusual paths that couldn''t have been predicted
+    at the start.
+
+    2. **More representative** — you keep the traces that actually matter for debugging rather than a
+    blind statistical sample.
+
+    3. **Better signal-to-noise ratio** — eliminates the wasted storage of "boring" successful traces
+    while preserving the interesting failure cases.
+
+
+    ## Disadvantages
+
+
+    1. **Higher resource overhead** — all spans must be transmitted to the collector, even for traces
+    that will eventually be dropped, consuming network bandwidth and temporary buffering.
+
+    2. **Added latency/complexity** — requires a centralized decision point and introduces buffering.
+
+    3. **State management** — the collector must hold partial traces in memory until they complete, which
+    can be challenging at very high scale.
+
+
+    ## When to Use It
+
+
+    Tail-based sampling is especially valuable in **production environments** where the cost of missing
+    a critical error trace is high, and when you need to correlate outcomes across many services. It''s
+    commonly implemented in OpenTelemetry Collectors and tools like Jaeger and Tempo.'
+  cited_slugs:
+  - opentelemetry-sampling
+  judge_faithfulness: 0.2
+  human_label: null
+  notes: ''
+- trace_id: cb796a36e6a9db4fd572773c84725ff4
+  question: Is tail-based sampling always better than head-based?
+  answer: 'No, tail-based sampling is not always better than head-based sampling — each has distinct tradeoffs,
+    and the right choice depends on your architecture, scale, and observability goals.
+
+
+    ## Head-Based Sampling
+
+
+    **How it works:** The sampling decision is made at the start of a request (at the ''head'' of the
+    trace) and propagated through trace context headers (e.g., `traceparent` in W3C Trace Context) to
+    all downstream services.
+
+
+    **Strengths:**
+
+    - **Low overhead** — spans can be discarded immediately; no buffering required
+
+    - **Scales linearly** with traffic because the decision is made once
+
+    - **Works in serverless/edge environments** where there is no central collector to aggregate spans
+
+    - **Simple to implement** and reason about
+
+    - **Distributed consistency** — every service in the trace makes the same decision
+
+
+    **Weaknesses:**
+
+    - **Blind to outcomes** — you must decide what to keep before you know if the trace contains an error,
+    an SLA breach, or an interesting anomaly
+
+    - **Can miss critical traces** — a rare but important failure may fall in the unsampled 99%
+
+
+    ## Tail-Based Sampling
+
+
+    **How it works:** All spans are buffered (typically at a collector like the OpenTelemetry Collector)
+    and the decision is made after the trace completes (at the ''tail'').
+
+
+    **Strengths:**
+
+    - **Outcome-aware** — you can keep 100% of error traces, slow traces, or traces matching specific
+    criteria
+
+    - **Higher signal density** — every retained trace is interesting by definition
+
+    - **Better for capturing edge cases** like rare errors or latency anomalies
+
+
+    **Weaknesses:**
+
+    - **High resource cost** — you must ingest, buffer, and store every span before deciding
+
+    - **Centralization required** — needs an aggregation point (collector gateway), which is impractical
+    in serverless or edge architectures
+
+    - **Bottleneck risk** — the collector becomes a scaling and availability concern
+
+    - **State management complexity** — especially in multi-collector or streaming pipelines (Kafka, etc.)
+
+    - **Doubles (or worse) your data ingestion** before sampling reduces it
+
+
+    ## The Hybrid Reality
+
+
+    Most mature systems use a **layered strategy**:
+
+
+    1. **Head-based coarse filtering** at the SDK/agent to drop the obvious majority (e.g., 95% of healthy,
+    fast requests)
+
+    2. **Tail-based intelligent retention** at the collector to keep all errors, anomalies, and traces
+    matching business rules
+
+    3. **Client-side dynamic sampling** (as Charity Majors advocates in the event-based observability
+    model) — letting the application decide what to record based on runtime context it knows best
+
+
+    ## When to Choose Which
+
+
+    | Scenario | Better Choice |
+
+    |---|---|
+
+    | Serverless / edge / mobile | Head-based |
+
+    | High-volume, cost-sensitive | Head-based (with probabilistic rules) |
+
+    | Low-volume, high-value transactions | Tail-based |
+
+    | Need to retain all errors/SLO breaches | Tail-based |
+
+    | Streaming pipelines (Kafka, etc.) | Tail-based with care |
+
+    | AI/LLM workflows with probabilistic outputs | Hybrid — head-based for volume, tail-based for hallucinations,
+    cost spikes, and quality issues |
+
+
+    **Bottom line:** Tail-based sampling gives better *signal quality* but at significantly higher *infrastructure
+    cost and complexity*. Head-based sampling gives better *scalability and simplicity* but with *lower
+    signal density*. A well-designed observability pipeline almost always combines both rather than committing
+    to one.'
+  cited_slugs:
+  - opentelemetry-sampling
+  - building-observability-tools
+  - llm-observability
+  judge_faithfulness: 0.2
+  human_label: null
+  notes: ''
+- trace_id: ee5ceaeff517beecaac70528615e74a8
+  question: Are there exactly three pillars of observability?
+  answer: 'Not according to everyone. The traditional framing defines exactly three pillars of observability:
+    metrics, logs, and traces. As described in the wiki''s page on the topic, these are three categories
+    of telemetry data that together give operators visibility into complex, distributed systems, with
+    system events serving as the foundation that produces these data types.
+
+
+    However, the three-pillar framing is contested. Charity Majors of Honeycomb explicitly rejects it
+    as a model of the discipline, calling the framing ''bullshit.'' Her argument, captured in the wiki''s
+    page on building observability tools, is that observability is fundamentally about a single primitive:
+    the wide, structured event scoped to a request. In her view, building observability on top of statsd-style
+    metrics or strict schemas is structurally incapable of delivering on the observability promise, because
+    metrics lose the connective tissue between data points and schemas constrain the questions that can
+    be asked in advance. Instead, she argues a true observability tool must support characteristics like
+    arbitrarily-wide structured raw events, context persisted through the execution path, no indexes or
+    schemas, high-cardinality/high-dimensionality, ordered dimensions for traceability, client-side dynamic
+    sampling, an exploratory visual interface, and close to real-time performance.
+
+
+    So while the conventional answer is yes, three pillars (metrics, logs, traces), at least one prominent
+    voice in the field argues that framing is wrong and that observability should be understood around
+    a different primitive entirely.'
+  cited_slugs:
+  - three-pillars-of-observability
+  - building-observability-tools
+  judge_faithfulness: 0.8
+  human_label: null
+  notes: ''
+- trace_id: a61eb49b6d802b6ba4b109dea35eac01
+  question: What is a span in distributed tracing?
+  answer: The provided context does not define what a span is in distributed tracing. While the context
+    discusses distributed tracing concepts such as trace sampling (in head-based and tail-based approaches)
+    and identifies traces as one of the three pillars of observability alongside metrics and logs, it
+    does not contain an explicit definition of a "span." Additional source material would be needed to
+    answer this question accurately.
+  cited_slugs:
+  - three-pillars-of-observability
+  - opentelemetry-sampling
+  judge_faithfulness: 1.0
+  human_label: null
+  notes: ''
+- trace_id: f46beb7782ee005c25682b424e8971e1
+  question: Why is context propagation important in tracing?
+  answer: The provided wiki pages do not directly discuss context propagation in tracing. The context
+    covers LLM observability fundamentals, the three pillars of observability (metrics, logs, and traces),
+    and LLM hallucination detection, but does not address context propagation specifically. In general
+    observability practice (beyond what is covered in the supplied context), context propagation is important
+    in tracing because it allows trace data to be correlated and stitched together as a request flows
+    across multiple services in a distributed system. It carries identifiers (such as trace IDs, span
+    IDs, and parent IDs) and contextual metadata (like user IDs, session tokens, or in the LLM case, prompts,
+    retrieved documents, and model parameters) across process and service boundaries. Without context
+    propagation, traces would be fragmented, making it impossible to reconstruct the full end-to-end journey
+    of a request, identify bottlenecks, or debug failures that span multiple services or LLM pipeline
+    stages. For LLM applications specifically, context propagation becomes even more critical because
+    workflows often involve multiple hops (retrieval, prompting, model invocation, post-processing), and
+    preserving context across these hops is what enables meaningful root-cause analysis. To get a definitive
+    answer grounded in your wiki, you would need a page that explicitly covers tracing mechanics or context
+    propagation in observability tooling.
+  cited_slugs:
+  - three-pillars-of-observability
+  - llm-observability
+  judge_faithfulness: 0.6
+  human_label: null
+  notes: ''
+- trace_id: 22beb79bd23dec3a1ef692299321d4fe
+  question: What is head-based sampling?
+  answer: 'Head-based sampling is a sampling technique used in distributed tracing where the decision
+    to sample a trace is made at the start (the "head") of a request. In other words, when a new request
+    enters the system, a sampling decision is made up front—before the full trace has been completed—and
+    that decision is then propagated to all the services involved in handling the request. This approach
+    is contrasted with tail-based sampling, which evaluates traces only after they complete to determine
+    their relevance. Head-based sampling is typically simpler and less resource-intensive to implement,
+    but it can miss rare errors or anomalies that occur later in the trace, since the decision to keep
+    or discard the trace was made before those events were known.
+
+
+    In the OpenTelemetry context, head-based sampling is one of the two primary categories of sampling
+    techniques (alongside tail-based sampling), and it is part of a broader sampling strategy designed
+    to retain meaningful insights into system behavior while reducing the overhead of storing and processing
+    every trace.'
+  cited_slugs:
+  - opentelemetry-sampling
+  judge_faithfulness: 0.2
+  human_label: null
+  notes: ''
+- trace_id: 9da14073510c4718815ba7788b1c2740
+  question: can you give me one example of it?
+  answer: 'One concrete example of an event (the foundation of observability) given in the context is
+    a client requesting resources from an enterprise server: the request is directed to an API endpoint
+    using its URL, the server checks the request for API key authentication credentials and client permissions,
+    and — assuming they are valid — processes the request according to the API''s specifications before
+    sending a response back. Each of those moments along the request path is a distinct event, and observability
+    platforms rely on those events to initiate the tracking, analysis, and correlation processes that
+    become logs, metrics, and traces.
+
+
+    If you meant a different ''it'' (for example, an example of head-based vs. tail-based sampling, or
+    an example of a wide structured event), let me know and I can pull a more specific example from the
+    relevant page.'
+  cited_slugs:
+  - three-pillars-of-observability
+  judge_faithfulness: 1.0
+  human_label: null
+  notes: ''
+- trace_id: 2dbc21bfd08d47378c0bb9375073dbbd
+  question: what do you mean by single primitive?
+  answer: 'By "single primitive," Charity Majors of Honeycomb means that observability should be built
+    around one fundamental data unit rather than the conventional "three pillars" (metrics, logs, and
+    traces). Specifically, that single primitive is the **wide, structured event scoped to a request**.
+
+
+    The argument goes like this: traditional observability tooling treats metrics, logs, and traces as
+    three separate, distinct data types, each with its own schema, storage, and query model. Majors rejects
+    this framing (calling it "bullshit") because it is structurally incapable of delivering true observability.
+    Here''s why one primitive — the rich event — is preferred:
+
+
+    1. **Connective tissue is preserved**: Statsd-style metrics aggregate data points at write time, losing
+    the relationships between them. When something goes wrong, you can''t reconstruct what actually happened
+    because the context between events is gone.
+
+
+    2. **Schemas constrain future questions**: Strict schemas (common in traditional logs and traces)
+    only let you ask questions you anticipated in advance. But observability is about handling *unknown-unknowns*
+    — questions you didn''t know to ask until something broke. A wide structured event has no rigid schema,
+    so you can query any dimension retroactively.
+
+
+    3. **One event can answer all question types**: A single well-instrumented event contains enough data
+    to derive metrics, reconstruct logs, or trace causality. You don''t need three separate systems; you
+    need rich events that can be sliced and diced in different ways during analysis.
+
+
+    4. **Scoping to a request** is key: The event isn''t a random log line — it''s tied to a specific
+    request''s execution path, with context (correlation IDs, user info, business attributes) persisted
+    through every span. This is what allows engineers to reconstruct unfamiliar system states without
+    shipping new code.
+
+
+    In short, the "single primitive" claim is the idea that you don''t need three pillars — you need one
+    highly-detailed, arbitrarily-wide, structured event per request, plus an exploratory interface that
+    can query it flexibly. Everything else (dashboards, metrics, alerts) is derived on top of that one
+    foundation.'
+  cited_slugs:
+  - building-observability-tools
+  judge_faithfulness: 1.0
+  human_label: null
+  notes: ''
+- trace_id: c103916fe5dc3ce7dd31a997c953a318
+  question: can you tell me what are the three pillars of observability
+  answer: 'The three pillars of observability are **metrics**, **logs**, and **traces** — three categories
+    of telemetry data that, when combined, give operators visibility into complex, distributed computing
+    environments. Observability enables developers to understand a system''s internal state based on its
+    external outputs, and IT personnel can identify the root cause of any performance issue by looking
+    at the data the system produces, without any additional testing or coding.
+
+
+    The "pillars" framing is borrowed from other domains that organize their foundations into three interrelated
+    components (like corporate responsibility''s environmental/social/financial sustainability, or Scrum''s
+    transparency/inspection/adaptation). In each case, the pillars are distinct and essential but incomplete
+    on their own — their real power lies in how they collaborate.
+
+
+    Observability is driven by system **events** — distinct occurrences on a network that happen at specific
+    times and that typically produce the data that becomes logs, metrics, and traces. For example, when
+    a client requests resources from an enterprise server, the request is directed to an API endpoint
+    using its URL, the server checks the request for API key authentication credentials and client permissions,
+    and — assuming they are valid — processes the request according to the API''s specifications before
+    sending a response back. Each of those moments is an event, and observability platforms rely on events
+    to initiate the tracking, analysis, and correlation processes that help DevOps teams visualize and
+    optimize their systems.
+
+
+    It''s worth noting that this framing is contested in some parts of the observability community — for
+    instance, Charity Majors of Honeycomb has argued that observability should be built on a single primitive
+    (wide, structured events) rather than the three pillars, calling that framing structurally incapable
+    of delivering on the observability promise.'
+  cited_slugs:
+  - three-pillars-of-observability
+  - building-observability-tools
+  judge_faithfulness: 1.0
+  human_label: null
+  notes: ''
+- trace_id: 5fee2272434a7646d49c76df4782bc0e
+  question: What is tail-based sampling?
+  answer: 'Tail-based sampling is a trace sampling technique in which the decision to keep or discard
+    a trace is made *after* the trace has completed, rather than at the start of the request. In contrast
+    to head-based sampling (where the sampling decision is made at the beginning of a request), tail-based
+    sampling evaluates the full trace once it finishes in order to determine its relevance.
+
+
+    This deferred decision-making is useful because it allows the sampling policy to take into account
+    the complete picture of what happened during the request — for example, whether an error occurred,
+    whether latency exceeded a threshold, or whether the trace exhibits other characteristics of interest.
+    As a result, tail-based sampling makes it easier to retain the traces that matter most (such as errors
+    and performance anomalies) while still discarding the bulk of uninteresting traffic, supporting the
+    goal of capturing both typical behavior and critical edge cases with statistical representativeness.
+
+
+    In short, tail-based sampling trades a small amount of additional buffering and decision-time latency
+    for a more informed sampling decision based on the trace''s full execution.'
+  cited_slugs:
+  - opentelemetry-sampling
+  judge_faithfulness: 0.3
+  human_label: null
+  notes: ''
+- trace_id: 7c9e57a74ab9b6a3a7441c23874948dc
+  question: can you tell me what are the three pillars of observability
+  answer: 'According to the wiki, the three pillars of observability are **metrics**, **logs**, and **traces**.
+    These are three categories of telemetry data that, when combined, give operators visibility into complex,
+    distributed computing environments. The pillars framing is borrowed from other domains that organize
+    their foundations into three interrelated components (e.g., corporate responsibility''s environmental,
+    social, and financial sustainability; Scrum''s transparency, inspection, and adaptation). In each
+    case, the pillars are distinct and essential but incomplete on their own — their real power lies in
+    how they collaborate.
+
+
+    The page also notes that observability is driven by system events — distinct occurrences on a network
+    at specific times that typically produce the data that becomes logs, metrics, and traces. For example,
+    when a client requests resources from a server, each moment (request routing, API key authentication,
+    permission checks, processing, response) is an event, and observability platforms rely on events to
+    initiate the tracking, analysis, and correlation processes.
+
+
+    It''s worth noting that the wiki contains a contrasting view from Charity Majors (in the building-observability-tools
+    page), who explicitly rejects the three pillars framing as "bullshit," arguing that observability
+    should be built on a single primitive — the wide, structured event — rather than on metrics, logs,
+    and traces as separate foundations.'
+  cited_slugs:
+  - three-pillars-of-observability
+  - building-observability-tools
+  judge_faithfulness: 1.0
+  human_label: null
+  notes: ''
+- trace_id: 9ddec8623a3fd3851ac398bfd82ea7e4
+  question: so, why traditional monitoring doesn't work in LLM case?
+  answer: 'Traditional monitoring falls short for LLM-based systems for several interconnected reasons:
+
+
+    1. **Non-deterministic behavior**: LLMs are probabilistic by nature, meaning the same input can produce
+    different outputs. Traditional APM (Application Performance Monitoring) tools are designed around
+    predictable systems with expected behavior, and they assume you can track things like uptime, error
+    rates, and latency against stable baselines. With LLMs, there is no fixed "correct" output to compare
+    against, so the traditional uptime/downtime model is meaningless.
+
+
+    2. **Unique failure modes are qualitative, not quantitative**: Traditional monitoring excels at catching
+    hard failures (crashes, exceptions, timeouts), but LLM failures are subtle and qualitative. The top
+    failure modes — hallucinations, cost spikes, prompt-injection attacks, and inconsistent user experiences
+    — are often invisible to normal logs and metrics. You can''t simply check a status code to know if
+    a response was factually wrong or misleading.
+
+
+    3. **Shift from uptime to output reliability and drift**: Because LLMs can degrade silently (their
+    behavior can drift as models update, as context sources change, or as user inputs evolve), the focus
+    has to shift from "is the system up?" to "is the output still reliable?" This requires measuring things
+    like hallucination rates, output quality, and behavioral drift over time — dimensions that traditional
+    monitoring tools were not built to capture.
+
+
+    4. **Unpredictable performance and cost**: LLM calls can have highly variable latency and token costs
+    depending on the prompt and response length. Traditional thresholds and alerting on static metrics
+    don''t capture this variability well, requiring new approaches to detect cost anomalies and latency
+    changes.
+
+
+    5. **Security and privacy concerns**: Issues like prompt hacking and data leakage are semantic problems,
+    not infrastructure problems, so they slip past conventional security monitoring.
+
+
+    In short, traditional monitoring was built for known-unknowns (predefined thresholds and runbooks),
+    but LLMs introduce unknown-unknowns — qualitative, probabilistic issues that demand a richer, event-based
+    observability approach that can capture the full context of each request and answer new questions
+    without shipping new code.
+
+
+    Cited slugs: llm-observability, building-observability-tools'
+  cited_slugs:
+  - llm-observability
+  - building-observability-tools
+  judge_faithfulness: 1.0
+  human_label: null
+  notes: ''
+- trace_id: 76151af6e139ec4b1bb8e390e8989edb
+  question: what topic can you answer here?
+  answer: 'Based on the provided context, I can answer questions on the following observability-related
+    topics:
+
+
+    1. **LLM Observability** — Why traditional monitoring falls short for LLMs, the unique challenges
+    they present (hallucinations, unpredictable performance/costs, security vulnerabilities like prompt
+    hacking, data privacy, inconsistent UX), the distinction between pre-deployment evaluation and post-deployment
+    observability, the LLM Observability Playbook, the tool landscape, and how integrated AI suites simplify
+    LLM observability across the development lifecycle.
+
+
+    2. **Building Observability Tools** — Charity Majors'' event-based specification for observability
+    tooling, including the distinction between monitoring (known-unknowns) and observability (unknown-unknowns),
+    the rejection of the "three pillars" (metrics, logs, traces) framing in favor of wide structured events,
+    and the required characteristics of an observability tool (arbitrarily-wide structured raw events,
+    context persisted through execution, no indexes or schemas, high-cardinality/high-dimensionality,
+    ordered dimensions, client-side dynamic sampling, exploratory visual interface, and close to real-time
+    performance).
+
+
+    3. **LLM Hallucination Detection** — What hallucinations are, why RAG alone is insufficient to prevent
+    them, how Datadog''s out-of-the-box hallucination detection in LLM Observability works, and the kinds
+    of questions teams need to answer to detect hallucinations (whether the LLM correctly interpreted
+    sources, omitted key facts, or fabricated citations).
+
+
+    Ask me anything specific within these areas — for example, why APM tools struggle with LLM workloads,
+    how observability differs from monitoring/evaluation, what makes a tool qualify as observability per
+    Majors'' specification, or how hallucination detection works in practice.'
+  cited_slugs:
+  - llm-observability
+  - building-observability-tools
+  - llm-hallucination-detection
+  judge_faithfulness: 1.0
+  human_label: null
+  notes: ''
+- trace_id: cf7be33840fc3b2f6ee152e500541645
+  question: What are the best practices for prompt monitoring in production LLM applications?
+  answer: 'Based on the provided context, here are the best practices for prompt monitoring in production
+    LLM applications:
+
+
+    ## 1. Shift from Uptime to Output Quality
+
+    Traditional APM assumes predictable systems, but LLMs are non-deterministic — the same prompt can
+    yield different outputs. Best practice is to track **output reliability and drift** rather than just
+    uptime.
+
+
+    ## 2. Track Hallucination Rates as a First-Class Metric
+
+    Hallucinations are a top failure mode. Best practices include:
+
+    - Detecting when an LLM''s output **disagrees with retrieved context** (e.g., in RAG pipelines)
+
+    - Answering specific questions for each response: Did the LLM interpret sources correctly? Did it
+    omit key facts that changed meaning? Did it fabricate plausible-sounding citations?
+
+    - Setting **alerts for hallucination rates**, since RAG alone does not prevent hallucinations — LLMs
+    can still fabricate responses while citing sources
+
+
+    ## 3. Monitor Cost, Latency, and Cost Anomalies
+
+    LLM workloads can produce unpredictable cost spikes. Set alerts for latency changes and cost anomalies
+    in addition to quality issues.
+
+
+    ## 4. Watch for Security Threats (Prompt Injection)
+
+    Monitor for prompt-injection attacks and other adversarial inputs as part of your production observability
+    strategy.
+
+
+    ## 5. Pair Pre-Deployment Evaluation with Post-Deployment Observability
+
+    These are distinct but interconnected: use evaluations before launch to set a baseline, and observability
+    afterward to catch drift, regressions, and rare failures in production traffic.
+
+
+    ## 6. Instrument with Observability-Grade Tooling
+
+    Following the event-based observability specification, your monitoring infrastructure should support:
+
+    - **Arbitrarily-wide structured raw events** so you can capture the full prompt, response, retrieved
+    context, metadata, and any dimension you may later need to query
+
+    - **Context persisted through the execution path** to trace a single prompt from input through retrieval,
+    model call, and post-processing
+
+    - **High-cardinality, high-dimensionality** data (e.g., per-user, per-prompt-template, per-model-version
+    attributes)
+
+    - **Ordered dimensions for traceability** to reconstruct unfamiliar prompt failure modes
+
+    - **Client-side dynamic sampling** so you can sample intelligently when volume is high
+
+    - **An exploratory visual interface** that lets you slice and dice by prompt template, user segment,
+    model version, etc.
+
+    - **Close to real-time** visibility so you can react quickly to regressions or attacks
+
+
+    ## 7. Capture Unknown-Unknowns
+
+    Because LLM failure modes are often qualitative and invisible to normal logs, choose tooling that
+    lets you answer *new* questions about prompt behavior without shipping new code — i.e., avoid metrics-only
+    or rigid-schema systems that constrain the questions you can ask in advance.
+
+
+    ## 8. Treat Inconsistent User Experience as a Signal to Monitor
+
+    User-facing inconsistencies are a top failure mode; instrument prompts so you can correlate complaints
+    and behavior with specific prompt versions and response characteristics.'
+  cited_slugs:
+  - llm-observability
+  - llm-hallucination-detection
+  - building-observability-tools
+  judge_faithfulness: 1.0
+  human_label: null
+  notes: ''
+- trace_id: 509a1e128b9c5d45548c885c56582663
+  question: Can you explain the difference between faithfulness and relevance in LLM evaluation scoring?
+  answer: The provided wiki pages do not contain specific information that defines or contrasts 'faithfulness'
+    and 'relevance' as distinct LLM evaluation scoring metrics. While the [llm-hallucination-detection]
+    page discusses how Datadog's hallucination detection evaluates whether an LLM's output agrees with
+    retrieved context (a concept closely related to 'faithfulness'), it does not explicitly use the term
+    'faithfulness' or compare it to 'relevance'. The [llm-observability] page provides a high-level overview
+    of LLM observability challenges and mentions pre-deployment evaluation vs. post-deployment observability,
+    but does not detail specific evaluation metrics like faithfulness or relevance. The [opentelemetry-sampling]
+    page is unrelated, as it focuses on trace sampling strategies. To accurately answer your question
+    about the difference between these two specific evaluation metrics, additional documentation covering
+    LLM evaluation criteria would be needed.
+  cited_slugs:
+  - llm-hallucination-detection
+  - llm-observability
+  - opentelemetry-sampling
+  judge_faithfulness: 1.0
+  human_label: null
+  notes: ''
+- trace_id: 055b2d4ddcefe2abd9b034cb46377438
+  question: What role does Langfuse play in LLM observability and how does it integrate with tracing?
+  answer: 'The provided context does not contain any information about Langfuse or its role in LLM observability.
+    The three context pages cover: (1) Datadog''s LLM Hallucination Detection feature, (2) a general overview
+    of LLM Observability challenges and concepts, and (3) Charity Majors'' event-based specification for
+    building observability tools. None of these pages mention Langfuse, so I cannot accurately answer
+    the question about its role or tracing integration without fabricating information. To answer this
+    question, I would need documentation or wiki pages specifically about Langfuse.'
+  cited_slugs:
+  - llm-hallucination-detection
+  - llm-observability
+  - building-observability-tools
+  judge_faithfulness: 1.0
+  human_label: null
+  notes: ''
+- trace_id: 3c50927740f9b7fa2ecc8ea7e0616db3
+  question: How do you detect hallucinations in an LLM app?
+  answer: 'Detecting hallucinations in an LLM application requires an ongoing, dedicated evaluation capability
+    rather than relying solely on techniques like retrieval-augmented generation (RAG). While RAG helps
+    reduce hallucinations by supplying verified context and prompting the model to cite sources, LLMs
+    can still fabricate plausible-sounding outputs even when citing those sources, so hallucination detection
+    must be treated as a separate, continuous concern.
+
+
+    According to Datadog''s LLM Observability documentation, hallucination detection is delivered as an
+    out-of-the-box evaluation that flags when an LLM''s output disagrees with the context provided by
+    retrieved sources. To detect hallucinations effectively, an LLM application team needs the ability
+    to answer a set of targeted questions about every response the model produces:
+
+
+    1. Did the LLM interpret the retrieved sources correctly?
+
+    2. Did the LLM omit key facts from the sources (i.e., the context) in a way that changed the meaning
+    of the response?
+
+    3. Did the LLM''s output reflect what the source actually said, or did the LLM fabricate a plausible-sounding
+    citation?
+
+
+    Answering these questions at scale requires observability tooling that can capture the prompt, the
+    retrieved context, and the model''s output together, then automatically evaluate whether the output
+    is grounded in (or contradicts) the supplied context. Once that pipeline is in place, teams can proactively
+    identify, analyze, and reduce hallucinations rather than discovering them only after users report
+    bad answers.
+
+
+    Practically, the detection workflow looks like this:
+
+    - Instrument the LLM application so each request captures the input, retrieved context, and generated
+    output as structured events.
+
+    - Run an automated evaluator over those events that compares the output''s claims against the retrieved
+    context.
+
+    - Surface disagreements as flagged evaluations tied back to the original request, so engineers and
+    product owners can triage them.
+
+    - Track hallucination rates over time, set alerts on regressions, and use the findings to refine prompts,
+    retrieval, or fine-tuning.
+
+
+    In short, you detect hallucinations by continuously evaluating LLM outputs against grounded context
+    using a dedicated evaluation feature (such as the out-of-the-box hallucination detection available
+    in Datadog LLM Observability) and by having the observability pipeline in place to surface, analyze,
+    and act on those findings across your production traffic.'
+  cited_slugs:
+  - llm-hallucination-detection
+  - llm-observability
+  judge_faithfulness: 0.5
+  human_label: null
+  notes: ''
+- trace_id: 08d5fc55d7cc367b798d33a4d4aab1d4
+  question: Is tail-based sampling always better than head-based?
+  answer: 'No, tail-based sampling is not always better than head-based sampling. According to the [opentelemetry-sampling]
+    page, both are valid sampling techniques, each suited to different scenarios. Head-based sampling
+    makes the decision at the start of a request, which is simple and cheap but cannot use information
+    about the trace''s outcome. Tail-based sampling evaluates traces after they complete, allowing decisions
+    based on the full execution path (e.g., retaining error traces or slow traces), but it requires buffering
+    complete traces and more processing resources, which can add latency and infrastructure complexity.
+    The ''right'' choice depends on your goals: if you need to ensure statistically representative samples
+    with minimal overhead, head-based is often sufficient. If you need to capture rare or interesting
+    traces (errors, anomalies) that can only be identified post-hoc, tail-based is more appropriate. In
+    high-volume systems, a hybrid strategy is common. The source material does not assert that one approach
+    is universally superior — it simply introduces both as legitimate techniques within the broader sampling
+    toolkit.'
+  cited_slugs:
+  - opentelemetry-sampling
+  judge_faithfulness: 1.0
+  human_label: null
+  notes: ''
+- trace_id: e76ddf84aca65a6410050fb8ac214880
+  question: Are there exactly three pillars of observability?
+  answer: 'The answer depends on whom you ask, and the context reflects an active disagreement.
+
+
+    **The conventional view: Yes, there are three pillars.** The mainstream framing, described in the
+    three-pillars-of-observability page, holds that observability is built on metrics, logs, and traces.
+    These are presented as three distinct, interrelated categories of telemetry data that together give
+    operators visibility into complex, distributed systems. The framing is borrowed from other domains
+    (like corporate responsibility''s environmental/social/financial pillars, or Scrum''s transparency/inspection/adaptation)
+    where distinct components are individually essential but only deliver real value in combination.
+
+
+    **The dissenting view: No, the pillars framing is wrong.** The building-observability-tools page captures
+    Charity Majors of Honeycomb''s argument that the three pillars model is "bullshit." She argues that
+    observability is fundamentally about a single primitive: the wide, structured event scoped to a request.
+    In her view, building observability on top of statsd-style metrics or rigid schemas is structurally
+    incapable of delivering on the observability promise, because metrics lose the connective tissue between
+    data points and schemas constrain the questions that can be asked in advance. Observability, she says,
+    should manage unknown-unknowns by instrumenting code at a level of detail that lets engineers answer
+    new questions and reconstruct unfamiliar system states without shipping new code.
+
+
+    **Practical takeaway:** If you accept the conventional taxonomy, there are exactly three pillars.
+    If you accept Majors''s critique, the pillars are an inadequate mental model and events are the true
+    foundation — which is consistent with the three-pillars page''s own observation that observability
+    is "driven by system events" that produce the data underlying metrics, logs, and traces. So even the
+    pillars framework implicitly treats events as the underlying primitive, just from a different angle.'
+  cited_slugs:
+  - three-pillars-of-observability
+  - building-observability-tools
+  judge_faithfulness: 1.0
+  human_label: null
+  notes: ''
+- trace_id: 057a1b198edad6bf57cad66814e7c4b1
+  question: How does LLM observability differ from traditional observability?
+  answer: 'LLM observability differs from traditional observability in several fundamental ways:
+
+
+    1. **Non-determinism vs. determinism**: Traditional observability tools and APM systems assume predictable,
+    deterministic system behavior. LLMs are non-deterministic — the same input can produce different outputs
+    — which breaks the assumptions built into standard monitoring tools. This forces a shift from tracking
+    uptime to measuring output reliability and drift.
+
+
+    2. **New failure modes**: Traditional observability is built to catch crashes, errors, latency spikes,
+    and resource exhaustion. LLM applications introduce qualitatively different failure modes — hallucinations,
+    cost spikes, prompt-injection attacks, and inconsistent user experiences — that are often invisible
+    to normal logs and metrics.
+
+
+    3. **Output quality, not just system health**: Whereas traditional monitoring centers on whether the
+    system is up and fast, LLM observability must also evaluate whether outputs are correct, faithful
+    to retrieved context, safe, and useful. This is a semantic and qualitative judgment, not a threshold-based
+    one.
+
+
+    4. **Cost as a first-class signal**: LLM applications have unpredictable, token-based costs that can
+    spike based on prompt length, model selection, or user behavior. Cost anomalies become a core observability
+    concern alongside latency and error rates, whereas in traditional systems cost is usually a static
+    infrastructure concern.
+
+
+    5. **Security and safety dimensions**: Traditional observability rarely tracks prompt-level threats
+    like prompt injection or data leakage. LLM observability must monitor for these as ongoing concerns.
+
+
+    6. **Richer event structure for probabilistic systems**: As Charity Majors argues, true observability
+    requires wide, structured, high-cardinality events that let engineers ask new questions without shipping
+    new code. This is especially true for LLMs, where the questions teams need to ask (e.g., "which prompt
+    templates produce hallucinations?", "which user segments see drift?") cannot be predicted in advance
+    — making aggregated metrics and fixed-schema logs insufficient.
+
+
+    In short, traditional observability assumes you can define what "good" looks like in advance through
+    thresholds and dashboards. LLM observability has to instrument rich, exploratory events so teams can
+    investigate probabilistic behavior, qualitative outputs, and emergent failure modes they didn''t anticipate.'
+  cited_slugs:
+  - llm-observability
+  - llm-hallucination-detection
+  - building-observability-tools
+  judge_faithfulness: 0.9
+  human_label: null
+  notes: ''
+- trace_id: bfa50c96a47f0fb3a183c071b559e25d
+  question: How does LLM observability differ from traditional observability?
+  answer: 'LLM observability differs from traditional observability in several fundamental ways, primarily
+    because the systems being observed have fundamentally different characteristics.
+
+
+    **1. Non-deterministic vs. Deterministic Systems**
+
+    Traditional APM tools assume predictable, deterministic systems where the same input reliably produces
+    the same output. LLMs, by contrast, are non-deterministic — the same prompt can produce different
+    outputs on different runs. This means traditional monitoring approaches, which rely on predictable
+    system behavior, are insufficient. Instead of tracking uptime, teams must measure output reliability
+    and drift over time.
+
+
+    **2. Unique Failure Modes**
+
+    LLM applications exhibit failure modes that are largely invisible to traditional logs and metrics:
+
+    - **Hallucinations**: LLMs can confidently generate false or unsupported information, which standard
+    observability tools are not designed to catch.
+
+    - **Cost spikes**: LLM API usage can lead to unpredictable cost anomalies based on token consumption.
+
+    - **Security vulnerabilities**: Prompt-injection attacks and other adversarial inputs are unique to
+    LLM systems.
+
+    - **Inconsistent user experiences**: Output quality can vary in ways that traditional metrics cannot
+    capture.
+
+
+    **3. Qualitative vs. Quantitative Concerns**
+
+    Traditional observability (as described by Charity Majors) is built around wide, structured events,
+    high-cardinality dimensions, and exploratory querying to answer unknown-unknowns. LLM observability
+    extends this with a strong focus on qualitative evaluation — for example, whether an LLM correctly
+    interpreted retrieved sources, omitted key facts, or fabricated plausible-sounding citations. These
+    are concerns that require dedicated evaluation mechanisms beyond standard metrics and traces.
+
+
+    **4. New Alerting Requirements**
+
+    Traditional monitoring relies on predefined thresholds for known metrics (latency, error rates, CPU
+    usage). LLM observability requires alerts for qualitatively different signals, such as hallucination
+    rates, output drift, and cost anomalies — things that are not captured by conventional thresholds.
+
+
+    **5. Workflow Complexity**
+
+    LLM applications often involve complex AI workflows such as retrieval-augmented generation (RAG),
+    multi-step chains, and agentic behaviors. Even augmented techniques like RAG do not eliminate hallucinations,
+    meaning teams need ongoing, separate observability for these workflows rather than relying on retrieval
+    alone as a safeguard.
+
+
+    In short, LLM observability extends the event-based, exploratory ethos of modern observability with
+    new primitives designed to handle probabilistic outputs, qualitative failure modes, and the unique
+    cost and security surface area of LLM-based systems.'
+  cited_slugs:
+  - llm-observability
+  - llm-hallucination-detection
+  - building-observability-tools
+  judge_faithfulness: 0.8
+  human_label: null
+  notes: ''
+- trace_id: 7bf96177b05b372409d12fd81a4a8bdf
+  question: How does LLM observability differ from traditional observability?
+  answer: 'LLM observability differs from traditional observability in several fundamental ways, because
+    the underlying systems behave very differently and produce qualitatively different failure modes.
+
+
+    **1. Non-deterministic vs. deterministic systems.** Traditional APM assumes predictable, deterministic
+    behavior where the same input reliably produces the same output. LLMs are probabilistic — the same
+    prompt can produce different responses each time, so observability cannot rely on simple uptime checks
+    or fixed thresholds. Instead, teams must measure *output reliability* and watch for drift over time.
+
+
+    **2. Qualitative failures vs. quantitative signals.** Traditional monitoring excels at catching known-unknowns
+    (latency spikes, error rates, CPU saturation) via predefined thresholds. LLMs introduce failure modes
+    that are qualitative and often invisible in standard logs: hallucinations, prompt-injection attacks,
+    inconsistent user experience, and subtle changes in response quality. These cannot be reduced to a
+    single metric.
+
+
+    **3. Output content vs. request health.** A traditional request either succeeds or fails. An LLM request
+    can "succeed" in the HTTP sense while returning fabricated, misleading, or unsafe content. LLM observability
+    must therefore evaluate the *substance* of the response, not just whether it was delivered — for example,
+    checking whether the output is supported by retrieved context, whether key facts were omitted, and
+    whether citations are real or fabricated.
+
+
+    **4. Cost and security as first-class concerns.** LLMs introduce unpredictable token-cost spikes and
+    new attack surfaces (prompt hacking, data exfiltration) that traditional APM was never designed to
+    surface. LLM observability must treat cost anomalies and security-relevant events alongside latency
+    and error tracking.
+
+
+    **5. Same primitive, different questions.** Both traditional observability (in the Honeycomb/event-based
+    sense) and LLM observability benefit from wide structured events with rich context, high-cardinality
+    dimensions, and exploratory query interfaces. The difference is in *what* you ask of that data: traditional
+    observability reconstructs unfamiliar system states in distributed software, while LLM observability
+    must also reconstruct the reasoning and content quality of probabilistic model outputs. Pre-deployment
+    evaluation and post-deployment observability are complementary disciplines for LLMs in a way they
+    aren''t for conventional services.
+
+
+    In short, traditional observability asks "did the system do what we asked?" while LLM observability
+    must additionally ask "was what the system produced actually correct, safe, and worth what we paid
+    for it?"'
+  cited_slugs:
+  - llm-observability
+  - llm-hallucination-detection
+  - building-observability-tools
+  judge_faithfulness: 1.0
+  human_label: null
+  notes: ''
+- trace_id: 592170de54e059ef2c5d27a5db5fedc0
+  question: How does LLM observability differ from traditional observability?
+  answer: 'LLM observability differs from traditional observability in several fundamental ways, driven
+    by the unique characteristics of large language models:
+
+
+    1. **Non-deterministic behavior**: Traditional systems are predictable—the same input typically produces
+    the same output. LLMs, however, are probabilistic, meaning identical prompts can yield different responses.
+    This shifts observability from tracking binary uptime metrics to measuring output reliability, consistency,
+    and drift over time.
+
+
+    2. **Qualitative failure modes**: Traditional APM tools excel at catching quantitative issues (latency
+    spikes, error rates, CPU usage), but LLM failures are often qualitative and invisible to standard
+    logs. Problems like hallucinations, biased outputs, or subtle factual errors don''t show up as exceptions
+    or 500 errors. New metrics like hallucination rates, response faithfulness, and answer relevance are
+    required.
+
+
+    3. **New alert and evaluation needs**: Instead of only alerting on latency and error budgets, LLM
+    observability requires alerts for hallucination rates, cost anomalies (token usage can spike unpredictably),
+    and prompt-injection attacks. It also introduces the need for continuous evaluation—pre-deployment
+    evaluation and post-deployment observability are distinct but interconnected practices, where evaluation
+    measures quality against known benchmarks and observability catches emergent issues in production.
+
+
+    4. **Security and privacy dimensions**: LLM applications introduce novel risks such as prompt hacking,
+    jailbreaks, and PII leakage that traditional observability tools were never designed to detect. The
+    instrumented data itself (prompts and completions) is often sensitive, requiring careful handling.
+
+
+    5. **Trace context is richer**: Where traditional observability traces may capture service-to-service
+    calls, LLM traces must capture prompt templates, model parameters, retrieved context (e.g., from RAG),
+    embeddings, token counts, and the model''s generated output—plus the relationship between retrieved
+    sources and the final answer.
+
+
+    6. **Same observability principles, new application**: At a deeper level, however, the core observability
+    philosophy still applies. As Charity Majors argues, true observability is about supporting unknown-unknowns
+    by instrumenting code at a level of detail that lets engineers answer new questions without shipping
+    new code—using wide, structured events, high-cardinality dimensions, persisted context, client-side
+    dynamic sampling, and exploratory interfaces. LLM observability applies these same principles to a
+    new domain, but the discipline is the same: capturing rich, structured, high-dimensional event data
+    so teams can investigate unfamiliar failure modes after the fact, rather than relying on predefined
+    dashboards and thresholds alone.
+
+
+    In short, LLM observability reuses the foundational philosophy of modern observability but extends
+    it to handle non-determinism, qualitative outputs, novel security threats, and cost variability that
+    traditional monitoring was never designed to address.'
+  cited_slugs:
+  - llm-observability
+  - llm-hallucination-detection
+  - building-observability-tools
+  judge_faithfulness: 0.75
+  human_label: null
+  notes: ''
+- trace_id: 155f64583cad83d0d900e56f8ce8a61c
+  question: How do you detect hallucinations in an LLM app?
+  answer: 'Detecting hallucinations in an LLM application requires evaluating whether the model''s output
+    is actually grounded in, and consistent with, the context it was given (for example, documents retrieved
+    in a RAG pipeline). It is not enough to rely on retrieval-augmented generation alone, because LLMs
+    can still fabricate plausible-sounding responses — even while citing sources — which gives users a
+    false sense of confidence.
+
+
+    A practical hallucination-detection workflow answers a specific set of questions about each model
+    response:
+
+
+    1. Did the LLM interpret the retrieved sources correctly?
+
+    2. Did the LLM omit key facts from the source context in a way that changed the meaning of the response?
+
+    3. Did the LLM''s output actually reflect what the source said, or did it fabricate a plausible-sounding
+    citation?
+
+
+    In practice, this is implemented as an automated, out-of-the-box evaluation that compares the LLM''s
+    output against the provided context and flags disagreements. For example, Datadog LLM Observability
+    includes hallucination detection as a built-in evaluation that lets teams proactively identify, analyze,
+    and reduce hallucinations in production traffic from RAG applications.
+
+
+    Because hallucinations are a top failure mode that is qualitative and often invisible to standard
+    logs, observability platforms also recommend setting alerts on hallucination rates (alongside latency
+    and cost anomalies) so that drift in output reliability is caught early, rather than only after a
+    user reports a bad answer.
+
+
+    In short, hallucination detection combines: (a) automated, context-grounded evaluations of every response,
+    (b) tracking of hallucination rate as a first-class operational metric, and (c) alerting on changes
+    in that rate so teams can investigate and fix problematic prompts, retrievers, or models.'
+  cited_slugs:
+  - llm-hallucination-detection
+  - llm-observability
+  judge_faithfulness: 0.6
+  human_label: null
+  notes: ''
+- trace_id: aadcb22db65b042f71bb946c49f5a0fd
+  question: who is trump?
+  answer: The provided context is about observability tooling (specifically Charity Majors' event-based
+    specification) and contains no information about Trump. Based on general knowledge, Donald Trump is
+    an American politician and businessman who served as the 45th President of the United States (2017–2021)
+    and was the 47th President (2025–present). He was previously a real estate developer and television
+    personality before entering politics.
+  cited_slugs: []
+  judge_faithfulness: 0.0
+  human_label: null
+  notes: ''
+- trace_id: 8920b7b8e94d28a59b5ecf18f23df890
+  question: How does LLM observability differ from traditional observability?
+  answer: 'LLM observability differs from traditional observability in several fundamental ways, primarily
+    because large language models introduce a new class of challenges that standard APM (Application Performance
+    Monitoring) and traditional observability tools were not designed to handle.
+
+
+    **1. Non-deterministic vs. deterministic systems**
+
+    Traditional observability tools are built around the assumption of predictable, deterministic systems
+    where the same input reliably produces the same output. LLMs break this assumption — the same prompt
+    can yield different responses on different runs. This means traditional metrics like uptime or request
+    success rates are insufficient, and teams must instead measure *output reliability* and *drift* over
+    time.
+
+
+    **2. Qualitative failure modes**
+
+    Traditional observability excels at catching quantitative issues like latency spikes, error rates,
+    and resource saturation. LLM-specific failure modes are largely *qualitative* and often invisible
+    to standard logs and metrics. These include:
+
+    - **Hallucinations** — the model confidently producing false or unsupported information
+
+    - **Prompt-injection attacks** — adversarial inputs that hijack model behavior
+
+    - **Cost anomalies** — unpredictable token usage and spending
+
+    - **Inconsistent user experience** — varying quality of responses
+
+
+    Because these problems don''t surface as clean numeric thresholds in traditional logs, observability
+    strategies must shift toward tracking things like hallucination rates, semantic output quality, and
+    behavioral anomalies.
+
+
+    **3. Pre-deployment evaluation vs. post-deployment monitoring**
+
+    LLM observability introduces a tighter coupling between *evaluation* (pre-deployment testing of model
+    behavior) and *observability* (post-deployment monitoring). Traditional systems rarely need this dual-track
+    approach because their behavior is more predictable. With LLMs, you need both: evaluation to catch
+    regressions before release and observability to detect drift, hallucinations, and emergent issues
+    in production.
+
+
+    **4. Context-dependent and probabilistic reasoning**
+
+    Unlike traditional request/response systems, LLM outputs depend on retrieved context (e.g., in RAG
+    pipelines), prompt construction, and model versioning. Observability must trace not just the technical
+    execution path but also the *semantic relationship* between inputs, retrieved sources, and generated
+    outputs — for example, verifying whether the model''s output actually reflects what the source said
+    or whether it fabricated a plausible-sounding citation.
+
+
+    **5. Security and data privacy as first-class concerns**
+
+    LLM applications introduce new risk surfaces (prompt hacking, data leakage through model outputs)
+    that traditional observability tooling was never built to monitor.
+
+
+    In short, LLM observability extends the event-based, high-cardinality, exploratory approach of modern
+    observability but adds layers for tracking probabilistic output quality, semantic correctness, cost
+    behavior, and AI-specific security threats — dimensions that traditional APM tools simply don''t model.'
+  cited_slugs:
+  - llm-observability
+  - llm-hallucination-detection
+  - building-observability-tools
+  judge_faithfulness: 1.0
+  human_label: null
+  notes: ''
+- trace_id: cb40135d8308bd7d4dbb48165f75198d
+  question: what is evaluation means here?
+  answer: 'In the context of these pages, "evaluation" refers to the pre-deployment (and ongoing) assessment
+    of LLM outputs against defined quality criteria — as opposed to "observability," which is the post-deployment
+    monitoring of LLM applications in production. According to the LLM Observability page, evaluation
+    and observability are described as having "distinct yet interconnected roles," with evaluation happening
+    before deployment to catch issues early. The LLM Hallucination Detection page provides a concrete
+    example: Datadog''s hallucination detection is an "out-of-the-box evaluation" within LLM Observability
+    that judges whether an LLM''s response agrees with the context provided by retrieved sources (e.g.,
+    RAG sources). Such evaluations answer questions like: Did the LLM interpret retrieved sources correctly?
+    Did it omit key facts in a way that changed meaning? Did it fabricate plausible-sounding citations?
+    In short, evaluation here means the structured, criteria-based judgment of LLM output quality (such
+    as faithfulness, correctness, completeness) — typically automated checks run before or alongside deployment
+    — to ensure the model produces reliable, trustworthy responses.'
+  cited_slugs:
+  - llm-observability
+  - llm-hallucination-detection
+  judge_faithfulness: 1.0
+  human_label: null
+  notes: ''
+- trace_id: 4e3fa11355cf65cf2926df1051ab596e
+  question: How does LLM observability differ from traditional observability?
+  answer: 'LLM observability differs from traditional observability in several important ways that stem
+    from the unique nature of large language models and the systems they power.
+
+
+    **1. Non-deterministic behavior vs. predictable systems**
+
+    Traditional observability tools (and APM in general) assume systems behave predictably — the same
+    input yields the same output, and engineers can define thresholds, alerts, and runbooks for known
+    failure modes. LLM applications break this assumption because LLMs are probabilistic: the same prompt
+    can produce different outputs across runs. This forces a shift from tracking "uptime" and request
+    success rates to measuring output reliability, consistency, and drift over time.
+
+
+    **2. Qualitative failure modes invisible to normal logs**
+
+    Traditional monitoring excels at catching quantitative, structured failures (e.g., latency spikes,
+    error codes, CPU saturation). LLM-specific failures — hallucinations, prompt-injection attacks, biased
+    or inconsistent responses, and cost spikes — are qualitative and often hidden in the natural-language
+    output. Normal logs won''t surface a hallucination, so LLM observability requires evaluating the *content*
+    of responses, not just the metadata of the call.
+
+
+    **3. New alerting dimensions**
+
+    Instead of (or in addition to) alerting on latency and error rates, LLM observability requires alerts
+    on hallucination rates, semantic drift, cost anomalies (tokens consumed, spend per request), prompt-injection
+    attempts, and UX consistency. Datadog addresses the hallucination dimension specifically with out-of-the-box
+    evaluations that detect when an LLM''s output disagrees with retrieved context — something standard
+    APM has no concept of.
+
+
+    **4. Observability vs. evaluation is a new split**
+
+    Traditional systems don''t really need a separate "evaluation" layer distinct from monitoring because
+    failures are well-defined (e.g., an HTTP 500, a timeout). For LLMs, pre-deployment evaluation (does
+    the model answer correctly on a test set?) and post-deployment observability (is the model drifting,
+    hallucinating, or being abused in production?) are distinct but interconnected disciplines that must
+    both be in place.
+
+
+    **5. High-cardinality, exploratory analysis matters more**
+
+    Per Charity Majors'' specification (as captured in the observability tooling page), true observability
+    is about wide, structured, high-cardinality events that let engineers answer new questions without
+    shipping new code. This matters even more for LLMs, because the dimensions you need to slice by —
+    prompt template version, model version, retrieval source, user segment, token cost — are far more
+    varied and combinatorial than in traditional systems. Predefined metrics and rigid schemas are even
+    less sufficient for LLM workloads than for conventional services.
+
+
+    **In short:** traditional observability assumes you can predict the questions you''ll need to ask;
+    LLM observability assumes you can''t — because the system''s behavior is probabilistic, its failure
+    modes are semantic, and its costs and risks scale in ways that aren''t captured by conventional metrics
+    and logs.'
+  cited_slugs:
+  - llm-observability
+  - llm-hallucination-detection
+  - building-observability-tools
+  judge_faithfulness: 0.85
+  human_label: null
+  notes: ''
+- trace_id: 4226bad23168168e14b182b21b491218
+  question: How does LLM observability differ from traditional observability?
+  answer: 'LLM observability differs from traditional observability in several fundamental ways. According
+    to the LLM Observability guide, traditional APM tools assume predictable systems, but LLMs are non-deterministic
+    — the same input can produce different outputs. This means teams must shift from tracking uptime to
+    measuring output reliability and drift. Standard APM tools aren''t enough because LLM failure modes
+    are qualitative and often invisible to normal logs; these include hallucinations, cost spikes, prompt-injection
+    attacks, and inconsistent user experiences. The guide also distinguishes between pre-deployment evaluation
+    and post-deployment observability as separate but interconnected disciplines. Additionally, the LLM
+    Hallucination Detection page notes that even techniques like retrieval-augmented generation (RAG)
+    do not prevent hallucinations, since LLMs can fabricate responses while citing sources, making hallucination
+    detection a separate, ongoing concern for production LLM and agentic applications. More broadly, as
+    described in the Building Observability Tools page, observability itself is distinct from monitoring:
+    monitoring handles known-unknowns through predefined thresholds and runbooks, while observability
+    is designed to handle unknown-unknowns by instrumenting code at a level of detail that lets engineers
+    answer new questions and reconstruct unfamiliar system states without shipping new code.'
+  cited_slugs:
+  - llm-observability
+  - llm-hallucination-detection
+  - building-observability-tools
+  judge_faithfulness: 0.9
+  human_label: null
+  notes: ''
+- trace_id: 72300ae4ebc93493b68bdb5c8aee505b
+  question: So are the traditional three pillars useless for LLM apps?
+  answer: 'No, the traditional three pillars (metrics, logs, and traces) are far from useless for LLM
+    applications — but on their own, they are no longer sufficient. Think of them as the necessary foundation
+    that must be extended with LLM-specific telemetry to give you true visibility into AI systems.
+
+
+    **Why the pillars still matter**
+
+    - **Metrics** are essential for tracking LLM-specific signals like token usage, cost per request,
+    latency (including time-to-first-token and total completion time), error rates, and throughput. You
+    still need to alert on cost spikes and latency regressions.
+
+    - **Logs** remain valuable for capturing raw prompts, completions, retrieved documents, error stack
+    traces, and debugging context — though they raise new data-privacy considerations (PII in prompts,
+    sensitive completions).
+
+    - **Traces** are arguably *more* important for LLM apps than for traditional systems, because LLM
+    pipelines are multi-step: query rewriting → retrieval → reranking → prompt assembly → model call →
+    post-processing. Distributed tracing is what lets you pinpoint whether slowness came from your vector
+    DB, your retriever, or the model itself.
+
+
+    **Why the pillars are not enough on their own**
+
+    Traditional observability assumes predictable, deterministic systems. LLMs break that assumption in
+    several ways:
+
+    1. **Non-deterministic outputs** — the same prompt can produce different completions, so a metric
+    like "error rate" misses quality issues that only appear in the content itself.
+
+    2. **Qualitative failure modes** — hallucinations, tone drift, prompt-injection exploits, and inconsistent
+    UX are not visible in CPU usage or HTTP status codes. You need evaluation signals (e.g., hallucination
+    scores, faithfulness to retrieved context, toxicity) layered on top of traditional telemetry.
+
+    3. **New entities to instrument** — prompts, completions, embeddings, retrieved chunks, tool calls,
+    and agent reasoning steps are first-class objects that classic APM was never designed to capture as
+    structured fields.
+
+    4. **Drift and regressions** — model behavior can quietly degrade as upstream providers update weights,
+    as your retrieval corpus changes, or as user behavior shifts. Detecting this requires ongoing output-quality
+    evaluation, not just uptime monitoring.
+
+
+    **The modern LLM observability model**
+
+    The industry (and Datadog''s LLM Observability product) has effectively added new "pillars" alongside
+    the originals:
+
+    - **Evaluations** (hallucination detection, relevance, safety, faithfulness) — often run by an LLM-as-a-judge
+
+    - **Prompt and completion data** as first-class structured fields
+
+    - **Retrieval quality metrics** (precision/recall of retrieved chunks, context relevance)
+
+    - **Cost and token economics** as a first-class concern
+
+    - **Feedback loops** from end users and production outcomes
+
+
+    **Bottom line:** The three pillars are your baseline plumbing — you absolutely still need metrics,
+    logs, and traces. But for LLM applications you must extend them with output-quality evaluations, prompt/completion
+    tracking, and retrieval-aware telemetry. Discard the traditional pillars and you lose your debugging
+    foundation; rely on them alone and you''ll miss the most important class of LLM failures: the ones
+    that look perfectly healthy in your dashboards but are silently returning confident nonsense.'
+  cited_slugs:
+  - three-pillars-of-observability
+  - llm-observability
+  - llm-hallucination-detection
+  judge_faithfulness: 0.3
+  human_label: null
+  notes: ''
+- trace_id: 5bbfd11c1cd57cbc2e5271a1041a66e6
+  question: Which of those differences matters most for catching hallucinations?
+  answer: 'The single most consequential difference for catching hallucinations is whether your observability
+    pipeline preserves the full request context end-to-end and evaluates it after the response is generated
+    — in other words, a combination of **tail-based sampling** and **context-persisted wide events**.
+
+
+    Here''s why this stands out above the other differences:
+
+
+    **1. You cannot decide at the start of a request whether a hallucination occurred.** A hallucination
+    is, by definition, a property of the *output* relative to the *retrieved context*. The sampling decision
+    therefore has to be made *after* the LLM finishes generating — which rules out head-based sampling
+    for any reliable hallucination signal. Tail-based sampling lets you keep the trace in a buffer, inspect
+    the LLM''s final answer against the retrieved sources, and then decide whether to retain it (or attach
+    a hallucination score) before discarding the rest.
+
+
+    **2. You need the entire chain of evidence in one place.** Hallucination detection specifically asks:
+    *Did the LLM interpret the retrieved sources correctly? Did it omit key facts? Did it fabricate a
+    citation?* To answer those questions you need, in a single correlated record, the user prompt, the
+    retrieved chunks, the LLM''s output, and ideally any tool calls or agent steps. The "context persisted
+    through the execution path" requirement is what makes this possible — metrics aggregates or pre-aggregated
+    logs lose the connective tissue between the source documents and the final answer.
+
+
+    **3. High-cardinality dimensions let you localize the problem.** Once you can score individual responses,
+    you need to slice by model version, prompt template, retrieval index version, chunk size, document
+    source, user segment, and so on. High-cardinality, schema-less events are what make it possible to
+    ask *which* prompts, *which* retrieved sources, or *which* model updates correlate with hallucination
+    spikes — without shipping new code to instrument those new dimensions.
+
+
+    **4. Close-to-real-time feedback closes the loop.** Hallucinations damage user trust quickly, so the
+    ability to alert, re-rank, or block bad responses in near real-time is more valuable here than in
+    many traditional observability use cases.
+
+
+    **5. Ordered dimensions and exploratory UI matter for forensics.** When a hallucination is reported,
+    the first question is *show me the exact request*. The second is *what did the LLM see versus what
+    did it say?* Both questions depend on being able to reconstruct an unfamiliar state from a single
+    wide event — exactly the unknown-unknowns workflow that distinguishes observability from monitoring.
+
+
+    The "no indexes or schemas" point is also quietly important: hallucination evaluation methods are
+    evolving fast (LLM-as-judge, entailment classifiers, citation faithfulness checks), and a rigid schema
+    would force a migration every time the evaluation model changes. Wide, schemaless events absorb that
+    churn.
+
+
+    **Bottom line:** If forced to pick one difference, it is the shift from head-sampled, pre-aggregated
+    metrics to **tail-sampled, context-rich events** — because hallucinations are a post-hoc, context-dependent
+    judgment, and the observability system has to preserve enough fidelity to make that judgment at all.'
+  cited_slugs:
+  - llm-hallucination-detection
+  - building-observability-tools
+  - opentelemetry-sampling
+  judge_faithfulness: 0.85
+  human_label: null
+  notes: ''
+- trace_id: 3fce7bbf9fb1dfb7e0c3bee43aed3ea3
+  question: How does LLM observability differ from traditional observability?
+  answer: 'LLM observability differs from traditional observability in several fundamental ways that stem
+    from the unique nature of large language models and AI applications.
+
+
+    ## 1. Non-Deterministic vs. Deterministic Systems
+
+    Traditional observability is built around predictable, deterministic systems where the same input
+    reliably produces the same output. LLM applications are inherently non-deterministic — the same prompt
+    can yield different responses across calls. This shifts the focus from tracking system uptime and
+    availability to measuring **output reliability, consistency, and drift over time**.
+
+
+    ## 2. Qualitative vs. Quantitative Failure Modes
+
+    Traditional monitoring catches failures like errors, latency spikes, and crashes through metrics and
+    logs. LLMs introduce **qualitative failure modes** that are often invisible to conventional tooling:
+
+    - **Hallucinations** — confidently generated but false information
+
+    - **Inconsistent user experiences** — varied quality across similar queries
+
+    - **Semantic regressions** — outputs that are syntactically valid but substantively wrong
+
+    - **Tone or brand-voice drift** — gradual shifts in response character
+
+
+    These require evaluating the *meaning* of outputs, not just whether a request succeeded.
+
+
+    ## 3. New Dimensions of Concern
+
+    LLM observability must track dimensions that traditional APM tools weren''t designed for:
+
+    - **Token usage and cost** — costs can spike unpredictably based on prompt/response length
+
+    - **Prompt engineering effectiveness** — which prompt variants produce better outcomes
+
+    - **Retrieval quality** (for RAG systems) — whether retrieved context was relevant and used correctly
+
+    - **Model behavior** — including refusal rates, response length distribution, and sentiment
+
+    - **Security threats** — prompt injection attacks, data leakage, jailbreak attempts
+
+
+    ## 4. Evaluation as a First-Class Concern
+
+    Traditional observability treats correctness as binary (success/failure). LLM observability requires
+    **continuous evaluation** alongside monitoring — comparing outputs against ground truth, retrieved
+    context, or quality rubrics. Datadog''s hallucination detection exemplifies this by checking whether
+    the LLM''s output agrees with the provided context, catching cases where models fabricate plausible-sounding
+    but unsupported claims.
+
+
+    ## 5. AI Workflow Complexity
+
+    LLM applications typically involve **multi-step pipelines** (retrieval, prompting, tool use, agentic
+    reasoning, post-processing) rather than monolithic service calls. Observability must trace through
+    these chained operations, capturing the full execution path so teams can pinpoint where quality degrades
+    — whether in retrieval, generation, or post-processing.
+
+
+    ## 6. Probabilistic Alerting Thresholds
+
+    Where traditional alerting uses static thresholds (CPU > 80%, error rate > 1%), LLM observability
+    needs **probabilistic and statistical approaches** — detecting when hallucination rates rise above
+    a baseline, when response distributions shift, or when semantic quality degrades subtly across a population
+    of requests.
+
+
+    ## The Unifying Insight
+
+    While Charity Majors'' event-based observability philosophy (wide structured events, high-cardinality
+    dimensions, exploratory analysis) remains relevant infrastructure, LLM observability layers **semantic
+    evaluation and AI-specific quality dimensions** on top. You''re not just asking "did the request succeed?"
+    — you''re asking "was the output correct, safe, helpful, and grounded?" That requires a fundamentally
+    richer observability practice than traditional systems demand.'
+  cited_slugs:
+  - llm-observability
+  - llm-hallucination-detection
+  - building-observability-tools
+  judge_faithfulness: 0.8
+  human_label: null
+  notes: ''
+- trace_id: 9005fa818b3ce960443ce2edaf794fbe
+  question: So are the traditional three pillars useless for LLM apps?
+  answer: 'No, the traditional three pillars (metrics, logs, and traces) are not useless for LLM applications,
+    but they are not sufficient on their own. The three pillars remain the foundation of observability
+    because they capture the events that occur in any distributed system, including LLM-powered ones.
+    You still need metrics for latency and cost tracking, logs for error capture, and traces to follow
+    requests through a workflow.
+
+
+    However, as the LLM Observability guide explains, traditional monitoring falls short for LLM applications
+    because LLMs are non-deterministic and present unique challenges, such as hallucinations, unpredictable
+    performance and costs, security vulnerabilities like prompt hacking, and inconsistent user experiences.
+    These problems are often qualitative and invisible to standard logs, metrics, and traces alone. For
+    example, a response can be returned quickly (good metric), without errors (clean logs), and traced
+    end-to-end (complete trace), yet still contain a hallucination or a fabricated citation that misleads
+    the user.
+
+
+    This is why observability for LLM apps needs to be augmented with LLM-specific evaluations, such as
+    Datadog''s out-of-the-box hallucination detection, which checks whether an LLM''s output disagrees
+    with retrieved context, omits key facts, or fabricates sources. In short, the three pillars are a
+    necessary baseline, but LLM observability requires an additional layer of evaluation and quality monitoring
+    to address the qualitative failure modes that traditional APM was never designed to detect.'
+  cited_slugs:
+  - llm-observability
+  - three-pillars-of-observability
+  - llm-hallucination-detection
+  judge_faithfulness: 0.85
+  human_label: null
+  notes: ''
+- trace_id: f23d456ec816b99fd3b6712551b012f0
+  question: Which of those differences matters most for catching hallucinations?
+  answer: 'Of the differences surfaced across these three pages, the one that matters most for catching
+    hallucinations is the shift from a metrics- or schema-bound view of telemetry to **wide, structured,
+    request-scoped events that carry the full execution path** — exactly the model Charity Majors argues
+    for. Hallucination detection is not a question you can answer from an aggregate metric or a pre-aggregated
+    trace summary; it requires looking at a single request and asking: what context was retrieved, what
+    prompt was sent, and what did the model actually return? The Datadog LLM Observability hallucination
+    evaluation works precisely by comparing the LLM''s output against the retrieved sources for that individual
+    response — checking whether the model interpreted the sources correctly, omitted key facts, or fabricated
+    a citation. That comparison is only possible if the prompt, the retrieved context, and the generated
+    output are all captured together on the same event with no fixed schema constraining what fields can
+    exist.
+
+
+    The other differences reinforce this one but are secondary. Tail-based sampling (vs. head-based) matters
+    because you cannot know a request is a hallucination until after the model has produced its output
+    and the output has been compared to the retrieved context, so the decision has to be deferred until
+    the trace is complete. High-cardinality, exploratory slicing matters for the investigative loop —
+    once a hallucination is flagged, engineers need to group by retrieval source, prompt template, model
+    version, user segment, etc., to find the root cause. But both of those capabilities only deliver value
+    if the underlying event already contains the full prompt-plus-context-plus-response payload, which
+    is the wide-events position. A metrics-first or strictly-typed observability stack would either drop
+    or refuse to store the retrieved-document content in the first place, and the hallucination check
+    would never have the evidence it needs.'
+  cited_slugs:
+  - llm-hallucination-detection
+  - building-observability-tools
+  - opentelemetry-sampling
+  judge_faithfulness: 1.0
+  human_label: null
+  notes: ''
+- trace_id: 9d1ec06fb183d5941fb4ebea57bd6729
+  question: How does LLM observability differ from traditional observability?
+  answer: 'LLM observability differs from traditional observability in several fundamental ways, driven
+    primarily by the non-deterministic, probabilistic nature of large language models and the qualitative
+    failure modes they introduce.
+
+
+    **1. Shift from predictable systems to probabilistic behavior**
+
+    Traditional APM and observability tools assume predictable, deterministic systems where the same input
+    reliably produces the same output. LLMs break this assumption — the same prompt can yield different
+    responses on different runs. As a result, the focus shifts from tracking uptime and conventional latency
+    to measuring *output reliability, drift, and consistency* over time.
+
+
+    **2. Different failure modes (qualitative vs. quantitative)**
+
+    Traditional observability excels at catching quantitative issues like CPU spikes, error rates, or
+    request timeouts. LLM-specific failure modes are largely qualitative and often invisible to normal
+    logs:
+
+    - Hallucinations (confident but false outputs)
+
+    - Cost spikes from unpredictable token usage
+
+    - Prompt-injection and other security attacks
+
+    - Inconsistent user experiences
+
+    These problems cannot be detected with threshold-based alerts on standard metrics — teams need to
+    set alerts on hallucination rates, latency changes, and cost anomalies specifically.
+
+
+    **3. Why standard APM tools fall short**
+
+    Because traditional monitoring manages *known-unknowns* via predefined thresholds, alerts, and runbooks,
+    it is structurally inadequate for LLM workloads, where many issues are *unknown-unknowns* tied to
+    model behavior, retrieval quality, and prompt construction. LLM observability requires instrumentation
+    that can answer new questions after the fact — not just react to predefined ones.
+
+
+    **4. RAG and retrieval add another layer**
+
+    Even with techniques like retrieval-augmented generation (RAG) that supply verified context, hallucinations
+    are not eliminated — LLMs can still fabricate plausible-sounding responses while citing sources. This
+    means hallucination detection must be treated as a separate, ongoing concern, requiring evaluation
+    of whether the model correctly interpreted, included, and represented retrieved sources — questions
+    traditional observability was never designed to answer.
+
+
+    **5. Broader scope across the lifecycle**
+
+    LLM observability is not a post-deployment afterthought. It is tightly connected to pre-deployment
+    evaluation, experimentation, and continuous improvement, weaving observability into the entire AI
+    development lifecycle rather than treating it as a siloed production monitoring function.
+
+
+    In short, LLM observability extends the traditional observability mindset — exploring unfamiliar system
+    states through rich instrumentation — into a domain where the system itself is non-deterministic,
+    the failure modes are qualitative, and trust in outputs must be actively measured rather than assumed.
+
+
+    **Cited wiki pages:**
+
+    - llm-observability — for the overview of why monitoring LLMs is not business-as-usual, the unique
+    challenges (non-determinism, hallucinations, cost spikes, prompt injection, inconsistent UX), and
+    the observability-vs-evaluation framing.
+
+    - llm-hallucination-detection — for why RAG is not enough and why hallucination detection is a separate,
+    ongoing concern that traditional observability tooling cannot address.
+
+    - building-observability-tools — for the contrast between traditional observability''s handling of
+    known-unknowns via thresholds/alerts and the need to answer new questions without shipping new code,
+    which is the foundation that LLM observability extends.'
+  cited_slugs:
+  - llm-observability
+  - llm-hallucination-detection
+  - building-observability-tools
+  judge_faithfulness: 1.0
+  human_label: null
+  notes: ''
