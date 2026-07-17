@@ -118,6 +118,119 @@ are swappable without touching any tracing code.
 - Answer prompts are **versioned in Langfuse** and linked to the generations that use
   them, so a quality change is always attributable to a specific prompt version.
 
+## What's traced & scored (signals reference)
+
+Everything below is emitted from `src/obs.py` (spans/scores/sessions) and
+`src/llm.py` (generations). There are **two trace types**.
+
+**Ingest — one trace per source URL:**
+
+```
+ingest_source                 root span · wiki.repair.round · WARNING/ERROR
+├─ fetch_source               span
+│  └─ http_get                span · http.*/url.* attrs · WARN <500B, ERROR ≥400
+├─ extract_md                 span · wiki.extract.extractor = trafilatura|lxml_fallback
+├─ retrieve_related           span · gen_ai.data_source.id=wiki · logs retrieved text
+├─ write_page                 generation · prompt=write_page
+├─ judge_page                 generation · prompt=judge_page
+├─ lint_links                 span · deterministic, no LLM
+└─ [repair loop ×≤2]  repair_page (gen) → judge_page (gen) → lint_links
+```
+
+**Chat — one trace per turn (`chat_turn`), grouped under a Langfuse session:**
+
+```
+chat_turn                     root span · session_id + user_id
+├─ retrieve_context           span · gen_ai.data_source.id=wiki · logs chunks
+├─ generate_answer            generation · prompt = v1 | v2 | weak
+└─ faithfulness_eval          generation · the hallucination judge
+```
+
+**Scores (online evaluation):**
+
+| Trace | Score | Type | Emitted by |
+|---|---|---|---|
+| Ingest | `groundedness` | NUMERIC 0–1 | `judge_page` |
+| Ingest | `faithfulness` | BOOLEAN | `judge_page` |
+| Ingest | `lint_pass` | BOOLEAN | `lint_links` |
+| Ingest | `lint_issue_count` | NUMERIC | `lint_links` |
+| Chat | `faithfulness` | NUMERIC 0–1 | `faithfulness_eval` |
+| Chat | `answer_relevance` | NUMERIC 0–1 | `faithfulness_eval` |
+| Chat | `user_distress` | BOOLEAN | event detector |
+| Chat | `out_of_scope` | BOOLEAN | event detector |
+| Chat | `user_disagreement` | BOOLEAN | event detector *(scores the prior turn)* |
+| Chat | `insufficient_answer` | BOOLEAN | event detector *(scores the prior turn)* |
+
+**Event detectors vs. quality metrics.** The first two chat scores are *quality
+metrics* ("how good, 0–1?"). The four BOOLEAN ones are *event detectors* ("did X
+happen, yes/no?") from `EVAL_STANDARD.md §3` — binary, narrow, action-tied. Two are
+single-turn (judge the current user message); two are **cross-turn** — they judge the
+*previous* answer against the follow-up message, so their score attaches to the prior
+turn's trace. They run online inside `chat_turn`, are emitted through the
+`obs.emit_detector_score` seam (tagged `agent` + `prompt_version`), and surface as
+chips in the web UI. Prompts: `src/prompts.py`; runner: `src/evals/detectors.py`;
+specs: `detectors/`. Replay demo: `python -m scripts.demo_detectors`. Sampling knob:
+`DETECTOR_SAMPLE_RATE` (default 1.0).
+
+**Per-generation quantitative capture:** model name, input/output/total **tokens**,
+**cost** (USD, computed by Langfuse from the model price map), and **latency** —
+captured automatically because every LLM call is a `generation` with a `model`.
+Failing stages set **`level="WARNING"`/`"ERROR"`** with a status message.
+
+> These are span-attached quantities that Langfuse aggregates into dashboards —
+> not OpenTelemetry *metrics* (no counters/histograms are exported).
+
+## OpenTelemetry vs. Langfuse — what's what
+
+Langfuse v4 runs on OpenTelemetry, so *everything* here is emitted as OTel spans.
+But that doesn't make it all portable: most fields are carried under `langfuse.*`
+attribute keys that only Langfuse understands. Verified against the installed SDK
+(`langfuse/_client/attributes.py`), the signals fall into **three** buckets.
+
+**A. Native OTel — a generic OTel backend recognizes these as-is**
+
+- The **trace/span tree** — parent/child nesting, context propagation, trace/span
+  IDs, timings.
+- **`session.id`** and **`user.id`** — `obs.session(session_id, user_id)` maps onto
+  these registered OTel semantic-convention attributes.
+- The **`OTEL_SEMCONV_STABILITY_OPT_IN`** SDK opt-in (`obs.py`).
+
+**B. Real OTel spans, but Langfuse-keyed attributes** — the *structure* ports; the
+*payload keys* don't. Everything below is set through the Langfuse SDK and lands
+under a `langfuse.observation.*` key:
+
+| What the code sets | OTel attribute actually emitted |
+|---|---|
+| `as_type="span"`/`"generation"` | `langfuse.observation.type` |
+| `model=` → tokens/cost | `langfuse.observation.model.name` / `…usage_details` / `…cost_details` |
+| `input=` / `output=` | `langfuse.observation.input` / `…output` |
+| `level` + `status_message` | `langfuse.observation.level` / `…status_message` |
+| `prompt=` link | `langfuse.observation.prompt.name` / `…version` |
+| **any `metadata={…}`** | `langfuse.observation.metadata.<key>` |
+
+> **Caveat on the "OTel" attribute names.** The conventionally-named keys the stages
+> set — `gen_ai.data_source.id`, `http.request.method`, `url.full`,
+> `http.response.status_code`, and the private `wiki.*` keys — are all passed as
+> **metadata**, so they're flattened under `langfuse.observation.metadata.` (e.g.
+> `langfuse.observation.metadata.gen_ai.data_source.id`). They're *named* per OTel
+> convention (deliberate, to signal intent and ease a future remap) but are **not**
+> emitted as canonical top-level OTel GenAI/HTTP attributes.
+
+**C. Pure Langfuse — no OTel representation at all** (separate ingestion/API):
+
+- **Scores** — `groundedness`, `faithfulness`, `answer_relevance`, `lint_pass`,
+  `lint_issue_count`.
+- **Managed/versioned prompts**, **datasets & experiments**, the **cost computation**
+  (usage keys × model price map), and the deep-link/query helpers.
+
+**Swapping backends** means rewriting only `src/obs.py` (point an OTLP exporter at
+your collector — not wired today). You'd keep the span tree, sessions, and users for
+free; you'd remap every `langfuse.observation.*` key; and you'd have to rebuild
+scores/prompts/datasets yourself.
+
+> **Mental model:** *structure and identity are OTel (portable); semantics and
+> evaluation are Langfuse.*
+
 ## Project structure
 
 ```

@@ -69,6 +69,11 @@ def info() -> dict:
     return {"doc_count": doc_count}
 
 
+def _serialize_detectors(verdicts: dict) -> dict:
+    """Flatten {name: DetectorVerdict} -> {name: {fired, comment}} for the UI."""
+    return {name: {"fired": v.fired, "comment": v.comment} for name, v in verdicts.items()}
+
+
 @app.post("/api/chat")
 def chat(req: ChatRequest) -> dict:
     session_id = req.session_id or f"web-{uuid.uuid4().hex[:8]}"
@@ -100,4 +105,9 @@ def chat(req: ChatRequest) -> dict:
         "trace_id": result.trace_id,
         "trace_url": obs.trace_url(result.trace_id),
         "session_url": obs.session_url(session_id),
+        # Event detectors (EVAL_STANDARD §3). `detectors` are about THIS turn's
+        # message; `prior_detectors` are about the PREVIOUS answer (the UI annotates
+        # the earlier bubble with them).
+        "detectors": _serialize_detectors(result.detectors),
+        "prior_detectors": _serialize_detectors(result.prior_detectors),
     }

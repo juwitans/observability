@@ -9,3 +9,4 @@ wiki/
 *.egg-info/
 TODO.md
 IMPLEMENTATION.md
+.harvest_state.json

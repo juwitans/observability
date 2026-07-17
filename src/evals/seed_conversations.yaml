@@ -1,0 +1,39 @@
+# Scripted multi-turn conversations for demonstrating the EVENT DETECTORS
+# (EVAL_STANDARD.md §3), used by scripts/demo_detectors.py. Each conversation is
+# engineered so a specific detector fires on a specific turn. `expect` lists the
+# detector(s) that SHOULD fire on that user message — a lightweight self-check the
+# replay script prints PASS/FAIL against (the detectors' own accuracy, not the
+# chatbot's answer quality).
+#
+# Timing note:
+#   - user_distress / out_of_scope judge the SAME message they're on.
+#   - user_disagreement / insufficient_answer judge the PRIOR answer, so they fire
+#     on the follow-up turn and their score attaches to the previous turn's trace.
+conversations:
+  - name: out_of_scope
+    turns:
+      - msg: "What is distributed tracing in observability?"
+        expect: []
+      - msg: "Great. Now can you give me a recipe for chocolate chip cookies?"
+        expect: [out_of_scope]
+
+  - name: user_distress
+    turns:
+      - msg: "How do the three pillars of observability relate to each other?"
+        expect: []
+      - msg: "This is absolute garbage, you clearly have no idea what the hell you're talking about."
+        expect: [user_distress]
+
+  - name: user_disagreement
+    turns:
+      - msg: "Is tail-based sampling always better than head-based sampling?"
+        expect: []
+      - msg: "That's wrong — the wiki actually says head-based is the sensible default. You contradicted the source."
+        expect: [user_disagreement]
+
+  - name: insufficient_answer
+    turns:
+      - msg: "How do you detect hallucinations in an LLM application?"
+        expect: []
+      - msg: "That's way too vague, it barely answers anything. Can you explain in much more detail?"
+        expect: [insufficient_answer]

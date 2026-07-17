@@ -81,3 +81,14 @@ class FaithfulnessVerdict(BaseModel):
     faithfulness: float = Field(ge=0.0, le=1.0, description="0-1: answer supported by context.")
     answer_relevance: float = Field(ge=0.0, le=1.0, description="0-1: answer addresses the question.")
     reasoning: str = Field(default="")
+
+
+# ── Event detectors ─────────────────────────────────────────────────────────
+class DetectorVerdict(BaseModel):
+    """Output of a binary event detector (EVAL_STANDARD.md §1: "did X happen?").
+
+    Unlike a quality metric, this is a yes/no flag tied to an action, not a 0-1
+    score. `fired=True` means the event was detected on the judged turn.
+    """
+    fired: bool = Field(description="True if the event was detected.")
+    comment: str = Field(default="", description="One-line justification naming the evidence.")

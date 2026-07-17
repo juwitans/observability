@@ -169,6 +169,41 @@ def score_trace(
     lf().score_current_trace(**_clean(dict(name=name, value=value, data_type=data_type, comment=comment)))
 
 
+# ── Event-detector scores (EVAL_STANDARD.md §5 wiring) ─────────────────────
+# The single seam for emitting binary event-detector flags. Every detector score
+# is tagged with `agent` + `prompt_version` (in metadata) so scores can be filtered
+# and grouped per agent and per prompt version. Passing `trace_id` (and optionally
+# `observation_id`) lets a *cross-turn* detector attach its flag to a PRIOR turn's
+# trace — e.g. "turn N's answer caused disagreement on turn N+1" is recorded on
+# turn N. Omit both to score the currently-active trace.
+DETECTOR_AGENT = "wiki_chatbot"
+
+
+def emit_detector_score(
+    name: str,
+    fired: bool,
+    comment: Optional[str] = None,
+    *,
+    trace_id: Optional[str] = None,
+    observation_id: Optional[str] = None,
+    prompt_version: Optional[int | str] = None,
+    agent: str = DETECTOR_AGENT,
+) -> None:
+    metadata = _clean(dict(agent=agent, prompt_version=prompt_version, detector=True))
+    if trace_id is None:
+        # No target trace given -> score the active trace in context.
+        lf().score_current_trace(
+            **_clean(dict(name=name, value=1 if fired else 0, data_type="BOOLEAN",
+                          comment=comment, metadata=metadata))
+        )
+    else:
+        lf().create_score(
+            **_clean(dict(name=name, value=1 if fired else 0, data_type="BOOLEAN",
+                          trace_id=trace_id, observation_id=observation_id,
+                          comment=comment, metadata=metadata))
+        )
+
+
 # ── Sessions (v4: propagate_attributes, NOT update_current_trace) ──────────
 @contextmanager
 def session(session_id: str, user_id: Optional[str] = None) -> Iterator[None]:

@@ -157,3 +157,132 @@ ANSWER:
 
 Return faithfulness, answer_relevance, and brief reasoning.
 """
+
+
+# ── Event detectors (EVAL_STANDARD.md §3) ───────────────────────────────────
+# Binary "did X happen?" judges, one narrow check each, adapted from Langfuse's
+# published support-agent templates for our wiki chatbot. Each returns a
+# DetectorVerdict {fired, comment}. The human-readable specs live in detectors/.
+
+# The agent's scope, quoted verbatim by the out_of_scope detector. This is the
+# single source of truth for "what is this bot for" — edit it here and the
+# detector follows.
+WIKI_SCOPE = """\
+This assistant answers questions about software observability and LLM/agent
+observability — concepts like tracing, metrics, logging, the three pillars,
+OpenTelemetry, sampling, and LLM hallucination detection — grounded in a curated
+wiki corpus. It is a documentation Q&A assistant for that domain. It is NOT a
+general-purpose assistant, a coding assistant, a personal assistant, or a chatbot
+for unrelated topics (weather, cooking, math homework, medical/legal advice, etc.).
+"""
+
+DETECT_USER_DISTRESS = """\
+You are a User Distress detector for a documentation chat assistant.
+
+Decide whether the LAST USER MESSAGE contains profanity or intense frustration that
+clearly goes beyond mild annoyance — an explicit signal the user is unhappy.
+
+Rules:
+- Judge ONLY the last user message. Ignore the assistant's responses.
+- Score fired=true for explicit profanity or strong frustration/anger.
+- Score fired=false for mild expressions ("ugh", "seriously?", "hmm that's odd").
+- Do not infer distress that isn't clearly expressed.
+
+CONVERSATION SO FAR (for context only):
+---
+{{history}}
+---
+
+LAST USER MESSAGE:
+---
+{{user_message}}
+---
+
+Return fired (true/false) and a one-line comment naming the evidence.
+"""
+
+DETECT_OUT_OF_SCOPE = """\
+You are an Out-of-Scope detector for a documentation chat assistant.
+
+Decide whether the LAST USER MESSAGE asks for something outside the agent's defined
+scope. The scope is defined SOLELY by the text below — use no other assumptions.
+
+AGENT SCOPE:
+---
+{{scope}}
+---
+
+Rules:
+- Score fired=true ONLY when the request has no plausible connection to the scope.
+- Score fired=false for adjacent, niche, or ambiguous requests. If unsure, score false.
+- Judge the user's request, not whether the assistant answered it well.
+
+LAST USER MESSAGE:
+---
+{{user_message}}
+---
+
+Return fired (true/false) and a one-line comment explaining the scope match or mismatch.
+"""
+
+DETECT_USER_DISAGREEMENT = """\
+You are a User Disagreement detector for a documentation chat assistant.
+
+Decide whether, in the LAST USER MESSAGE, the user pushes back on, corrects, or
+signals the PRIOR ASSISTANT ANSWER was wrong or did not work.
+
+Rules:
+- Score fired=true if the user says the answer was wrong, contradicts it, says it
+  didn't work when tried, or that the described thing couldn't be found.
+- Score fired=false for neutral follow-up questions, requests to escalate without
+  blame, or new unrelated questions.
+- Judge only opposition to the PRIOR ASSISTANT ANSWER, not general complaints.
+
+CONVERSATION SO FAR (for context):
+---
+{{history}}
+---
+
+PRIOR ASSISTANT ANSWER:
+---
+{{prev_answer}}
+---
+
+LAST USER MESSAGE:
+---
+{{user_message}}
+---
+
+Return fired (true/false) and a concise comment naming the disagreement (or its absence).
+"""
+
+DETECT_INSUFFICIENT_ANSWER = """\
+You are an Insufficient Answer detector for a documentation chat assistant.
+
+Decide whether, in the LAST USER MESSAGE, the user signals the PRIOR ASSISTANT
+ANSWER was too brief, vague, or didn't fully address their need.
+
+Rules:
+- Score fired=true for explicit elaboration requests ("can you explain more?",
+  "that doesn't really answer it") or clearly implied insufficiency.
+- Score fired=false for natural follow-ups that build on a complete answer without
+  reproach. Do NOT confuse a brand-new question with an insufficiency signal.
+- Judge only against the PRIOR ASSISTANT ANSWER.
+
+CONVERSATION SO FAR (for context):
+---
+{{history}}
+---
+
+PRIOR ASSISTANT ANSWER:
+---
+{{prev_answer}}
+---
+
+LAST USER MESSAGE:
+---
+{{user_message}}
+---
+
+Return fired (true/false) and a one-line comment.
+"""

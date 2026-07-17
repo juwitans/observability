@@ -154,6 +154,9 @@ function parseBlocks(text) {
 }
 
 // ── render conversation ────────────────────────────────────────────────────
+const DETECTOR_LABELS = { user_distress: "user distress", out_of_scope: "out of scope", user_disagreement: "user disagreement", insufficient_answer: "insufficient answer" };
+function flagsFrom(d) { if (!d) return []; return Object.keys(d).filter(k => d[k] && d[k].fired).map(k => ({ name: k, comment: d[k].comment || "" })); }
+
 function renderMessages() {
   const parts = [];
 
@@ -193,7 +196,7 @@ function renderMessages() {
         <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
           <span style="display: inline-flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; padding: 4px 9px; border-radius: 999px; color: ${faithColor(f)}; background: ${faithSoft(f)};"><span style="width: 6px; height: 6px; border-radius: 50%; background: ${faithColor(f)};"></span>faithfulness ${f.toFixed(2)}</span>
           <button data-view="${i}" style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 500; color: #7C6FD6; background: transparent; border: 1px solid #E0D8F4; border-radius: 999px; padding: 4px 10px; cursor: pointer;">view trace →</button>
-          ${cites}
+          ${cites}${(m.flags||[]).map(fl => `<span title="${escapeHtml(fl.comment)}" style="display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;padding:4px 9px;border-radius:999px;color:#B4541E;background:#FBEADF;border:1px solid #F3D3BE;"><span style="width:6px;height:6px;border-radius:50%;background:#B4541E;"></span>${escapeHtml(DETECTOR_LABELS[fl.name]||fl.name)}</span>`).join("")}
         </div>
       </div>`);
   });
@@ -344,7 +347,17 @@ async function send(q) {
       trace_id: data.trace_id,
       trace_url: data.trace_url,
     };
-    state.messages.push({ role: "bot", blocks: parseBlocks(data.answer), tel });
+    // Cross-turn detectors judge the PREVIOUS answer -> annotate that bubble.
+    const priorFlags = flagsFrom(data.prior_detectors);
+    if (priorFlags.length) {
+      for (let j = state.messages.length - 1; j >= 0; j--) {
+        if (state.messages[j].role === "bot") {
+          state.messages[j].flags = (state.messages[j].flags || []).concat(priorFlags);
+          break;
+        }
+      }
+    }
+    state.messages.push({ role: "bot", blocks: parseBlocks(data.answer), tel, flags: flagsFrom(data.detectors) });
     state.selected = state.messages.length - 1;
   } catch (e) {
     state.messages.push({ role: "bot", blocks: [{ t: "p", text: "⚠️ error: " + String(e) }], tel: null });
